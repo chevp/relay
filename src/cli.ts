@@ -26,8 +26,8 @@ import { registerStory } from './commands/story.js';
 async function main(): Promise<void> {
   const program = new Command();
   program
-    .name('nuna')
-    .description('Unified Nuna CLI — serve, open, test, build, validate, mcp')
+    .name('relay')
+    .description('Nuna relay — serve, open, test, build, validate, mcp')
     .version(VERSION);
 
   registerServe(program);

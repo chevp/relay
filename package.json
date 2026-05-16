@@ -1,10 +1,10 @@
 {
-  "name": "@nuna/cli",
+  "name": "@nuna/relay",
   "version": "0.2.0",
-  "description": "Unified Nuna CLI — serve, open, test, build, validate, mcp",
+  "description": "Nuna relay — serve, open, test, build, validate, mcp. Relays nuna:// URLs to the player.",
   "type": "module",
   "bin": {
-    "nuna": "./dist/cli.js"
+    "relay": "./dist/cli.js"
   },
   "main": "./dist/cli.js",
   "scripts": {
@@ -43,6 +43,7 @@
   ],
   "keywords": [
     "nuna",
+    "relay",
     "cli",
     "dev-server",
     "game-dev"

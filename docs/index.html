@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>nuna-cli — Install Guide</title>
+<title>relay — Install Guide</title>
 <style>
   :root {
     --bg: #0e1116;
@@ -175,7 +175,7 @@
 <div class="wrap">
 
 <header>
-  <h1>nuna-cli <span class="badge">v0.2.0</span></h1>
+  <h1>relay <span class="badge">v0.2.0</span></h1>
   <p class="lead">Install the unified <code>nuna</code> CLI on your machine — the dev entrypoint for the Nuna runtime (serve, open, build, validate, mcp, story).</p>
 </header>
 
@@ -213,14 +213,14 @@
 </table>
 
 <div class="warn">
-  <strong>Why no <code>npm install -g @nuna/cli</code>?</strong> The package is private and not published to a registry. Install always happens from a local clone of <code>nuna/nuna/tools/nuna-cli/</code>.
+  <strong>Why no <code>npm install -g @nuna/relay</code>?</strong> The package is private and not published to a registry. Install always happens from a local clone of <code>nuna/nuna/tools/relay/</code>.
 </div>
 
 <h2 id="install">2. Install (recommended: pnpm link)</h2>
 <p>This is the fastest workflow for a developer who also touches the CLI source. It puts <code>nuna</code> on your <code>PATH</code> as a symlink into the repo, so a rebuild is enough to pick up your changes — no reinstall.</p>
 
 <h3><span class="step-num">1</span>Install dependencies</h3>
-<pre><code>cd c:/chevp/nuna/nuna/tools/nuna-cli
+<pre><code>cd c:/chevp/nuna/nuna/tools/relay
 pnpm install</code></pre>
 
 <h3><span class="step-num">2</span>Build the CLI</h3>
@@ -240,14 +240,14 @@ pnpm install</code></pre>
 
 <h3>3a. npm global install (no link)</h3>
 <p>Same outcome, no symlink — re-run on each rebuild:</p>
-<pre><code>cd c:/chevp/nuna/nuna/tools/nuna-cli
+<pre><code>cd c:/chevp/nuna/nuna/tools/relay
 pnpm install
 pnpm build
 npm install -g .</code></pre>
 
 <h3>3b. Run from source without installing</h3>
 <p>For one-off use, skip the build entirely and run TypeScript directly via <code>tsx</code>:</p>
-<pre><code>cd c:/chevp/nuna/nuna/tools/nuna-cli
+<pre><code>cd c:/chevp/nuna/nuna/tools/relay
 pnpm install
 pnpm dev -- serve --port 8080
 # or
@@ -256,13 +256,13 @@ pnpm dev -- open ./games/my-game</code></pre>
 
 <h3>3c. Run the built bundle directly</h3>
 <p>If you do not want it on <code>PATH</code> at all:</p>
-<pre><code>node c:/chevp/nuna/nuna/tools/nuna-cli/dist/cli.js serve</code></pre>
+<pre><code>node c:/chevp/nuna/nuna/tools/relay/dist/cli.js serve</code></pre>
 
 <h2 id="verify">4. Verify the install</h2>
 <pre><code>nuna --version
 # 0.2.0
 
-nuna --help
+relay --help
 # Usage: nuna [options] [command]
 #   serve     Start the Nuna dev HTTP server for the current game repo
 #   open      Open a game in the Nuna player (combo: serve + nuna://play)
@@ -274,23 +274,23 @@ nuna --help
 
 <p>Smoke test in a game folder:</p>
 <pre><code>cd c:/chevp/nuna/nuna/games/my-game
-nuna serve --port 8080</code></pre>
+relay serve --port 8080</code></pre>
 <p>You should see a banner with the bind address, static roots, discovery URL (<code>http://localhost:8080/discover.json</code>) and health URL.</p>
 
 <h2 id="commands">5. Commands at a glance</h2>
 <table>
   <tr><th>Command</th><th>Status</th><th>Purpose</th></tr>
-  <tr><td><code>nuna serve</code></td><td>implemented</td><td>Dev HTTP server for the current game repo (replaces the old <code>nuna-serve</code> bin).</td></tr>
-  <tr><td><code>nuna open [path|url]</code></td><td>implemented</td><td>Combo mode: starts the dev server <em>and</em> launches <code>nuna://play?discovery=...</code> in <code>nuna-player.exe</code>. <kbd>Ctrl</kbd>+<kbd>C</kbd> stops both. With an <code>http(s)://</code> arg, just hands the URL to the OS handler.</td></tr>
-  <tr><td><code>nuna test</code></td><td>stub</td><td>Reserved for MCP test mode.</td></tr>
-  <tr><td><code>nuna build</code></td><td>stub</td><td>Reserved for the game build pipeline.</td></tr>
-  <tr><td><code>nuna validate</code></td><td>stub</td><td>Reserved for game validation.</td></tr>
-  <tr><td><code>nuna mcp</code></td><td>stub</td><td>Reserved for the MCP server (subsumes the planned <code>frost.exe</code>).</td></tr>
-  <tr><td><code>nuna story</code></td><td>stub</td><td>Reserved for story-tooling.</td></tr>
+  <tr><td><code>relay serve</code></td><td>implemented</td><td>Dev HTTP server for the current game repo (replaces the old <code>nuna-serve</code> bin).</td></tr>
+  <tr><td><code>relay open [path|url]</code></td><td>implemented</td><td>Combo mode: starts the dev server <em>and</em> launches <code>nuna://play?discovery=...</code> in <code>nuna-player.exe</code>. <kbd>Ctrl</kbd>+<kbd>C</kbd> stops both. With an <code>http(s)://</code> arg, just hands the URL to the OS handler.</td></tr>
+  <tr><td><code>relay test</code></td><td>stub</td><td>Reserved for MCP test mode.</td></tr>
+  <tr><td><code>relay build</code></td><td>stub</td><td>Reserved for the game build pipeline.</td></tr>
+  <tr><td><code>relay validate</code></td><td>stub</td><td>Reserved for game validation.</td></tr>
+  <tr><td><code>relay mcp</code></td><td>stub</td><td>Reserved for the MCP server (subsumes the planned <code>frost.exe</code>).</td></tr>
+  <tr><td><code>relay story</code></td><td>stub</td><td>Reserved for story-tooling.</td></tr>
 </table>
 
-<h3>Common <code>nuna serve</code> flags</h3>
-<pre><code>nuna serve \
+<h3>Common <code>relay serve</code> flags</h3>
+<pre><code>relay serve \
   --port 8080 \
   --host 0.0.0.0 \
   --config ./nuna-serve.xml \
@@ -302,17 +302,17 @@ nuna serve --port 8080</code></pre>
 <h2 id="update">6. Updating &amp; uninstalling</h2>
 
 <h3>Update after a <code>git pull</code></h3>
-<pre><code>cd c:/chevp/nuna/nuna/tools/nuna-cli
+<pre><code>cd c:/chevp/nuna/nuna/tools/relay
 pnpm install
 pnpm build</code></pre>
 <p>If you used <code>pnpm link --global</code>, that is enough — the symlink picks up the new <code>dist/</code>. If you used <code>npm install -g .</code>, re-run that step.</p>
 
 <h3>Uninstall</h3>
 <pre><code># If installed via pnpm link --global
-pnpm uninstall --global @nuna/cli
+pnpm uninstall --global @nuna/relay
 
 # If installed via npm install -g .
-npm uninstall -g @nuna/cli</code></pre>
+npm uninstall -g @nuna/relay</code></pre>
 
 <h2 id="troubleshoot">7. Troubleshooting</h2>
 
@@ -322,19 +322,19 @@ npm uninstall -g @nuna/cli</code></pre>
 <p>Add the printed folder to <code>PATH</code> (Windows: System Properties &rarr; Environment Variables; macOS/Linux: append to <code>~/.zshrc</code> or <code>~/.bashrc</code>). Open a new terminal.</p>
 
 <h3><code>Cannot find module '.../dist/cli.js'</code></h3>
-<p>You linked before building. Run <code>pnpm build</code> in <code>tools/nuna-cli/</code>.</p>
+<p>You linked before building. Run <code>pnpm build</code> in <code>tools/relay/</code>.</p>
 
 <h3>Permission errors on <code>npm install -g .</code> (macOS/Linux)</h3>
 <p>Either prefix with <code>sudo</code>, or — better — use a Node-version manager (nvm, fnm, volta) so the global prefix lives in your home directory.</p>
 
 <h3>Port already in use</h3>
-<pre><code>nuna serve --port 8081</code></pre>
+<pre><code>relay serve --port 8081</code></pre>
 
 <h3>It opens a browser instead of <code>nuna-player.exe</code></h3>
-<p>The <code>nuna://</code> protocol handler is registered by the <code>nuna-player</code> Windows installer (<code>nuna-player-setup.exe</code>). Without it the OS has no handler and falls back to a browser. Install the player first, then retry <code>nuna open</code>.</p>
+<p>The <code>nuna://</code> protocol handler is registered by the <code>nuna-player</code> Windows installer (<code>nuna-player-setup.exe</code>). Without it the OS has no handler and falls back to a browser. Install the player first, then retry <code>relay open</code>.</p>
 
 <footer>
-  Source: <code>tools/nuna-cli/</code> &nbsp;&middot;&nbsp; Package: <code>@nuna/cli</code> &nbsp;&middot;&nbsp; Bin: <code>nuna</code> &nbsp;&middot;&nbsp; Author: Patrice Chevillat
+  Source: <code>tools/relay/</code> &nbsp;&middot;&nbsp; Package: <code>@nuna/relay</code> &nbsp;&middot;&nbsp; Bin: <code>nuna</code> &nbsp;&middot;&nbsp; Author: Patrice Chevillat
 </footer>
 
 </div>

@@ -1,25 +1,25 @@
-# @nuna/cli
+# @nuna/relay
 
-Unified Nuna CLI — pure TypeScript / Node ≥20. Orchestrates serving,
-opening, validating, building for Nuna games. Contains **no
-native code**.
+Nuna relay — pure TypeScript / Node ≥20. Relays `nuna://` URLs and
+orchestrates serving, opening, validating, building for Nuna games.
+Contains **no native code**.
 
 ---
 
 ## Scope
 
-`@nuna/cli` is responsible for everything that does **not** require the
+`@nuna/relay` is responsible for everything that does **not** require the
 Vulkan renderer:
 
-| Command         | Purpose                                                     |
-| --------------- | ----------------------------------------------------------- |
-| `nuna serve`    | Dev HTTP server (Fastify). Mounts roots from `nuna-serve.xml`, exposes `/discover.json`, `/health`, per-root SHA-256 manifests. |
-| `nuna open`     | `serve` + hands `nuna://play?discovery=…` to the OS URL handler. |
-| `nuna validate` | Game validation against the Synth Protocol schema.          |
-| `nuna build`    | Game build pipeline.                                        |
-| `nuna mcp`      | MCP server for AI tooling.                                  |
-| `nuna test`     | MCP test harness.                                           |
-| `nuna story`    | Story / artifact-pipeline orchestration.                    |
+| Command          | Purpose                                                     |
+| ---------------- | ----------------------------------------------------------- |
+| `relay serve`    | Dev HTTP server (Fastify). Mounts roots from `nuna-serve.xml`, exposes `/discover.json`, `/health`, per-root SHA-256 manifests. |
+| `relay open`     | `serve` + hands `nuna://play?discovery=…` to the OS URL handler. |
+| `relay validate` | Game validation against the Synth Protocol schema.          |
+| `relay build`    | Game build pipeline.                                        |
+| `relay mcp`      | MCP server for AI tooling.                                  |
+| `relay test`     | MCP test harness.                                           |
+| `relay story`    | Story / artifact-pipeline orchestration.                    |
 
 What it is **not**: the renderer. See **Player** below.
 
@@ -28,8 +28,8 @@ What it is **not**: the renderer. See **Player** below.
 ## Install
 
 ```bash
-npm i -g @nuna/cli
-nuna --help
+npm i -g @nuna/relay
+relay --help
 ```
 
 Node ≥ 20 required. The published tarball contains only `dist/`,
@@ -45,12 +45,12 @@ The Vulkan renderer is shipped independently as
 the public `chevp/nuna-player` repo.
 
 ```
-@nuna/cli  ──emits──▶  nuna://play?discovery=…  ──OS handler──▶  @nuna/player
-   (npm,                                                            (npm + Inno
-    pure JS)                                                          installer)
+@nuna/relay  ──emits──▶  nuna://play?discovery=…  ──OS handler──▶  @nuna/player
+   (npm,                                                              (npm + Inno
+    pure JS)                                                            installer)
 ```
 
-`@nuna/cli` does **not** spawn or bundle the player exe. The two
+`@nuna/relay` does **not** spawn or bundle the player exe. The two
 packages communicate exclusively through the `nuna://` URL protocol,
 which the player registers at install time. You can install either
 package without the other.
@@ -67,9 +67,9 @@ Both channels ship the **same exe** built by the same CI job — see the
 
 ### Why split
 
-1. CLI consumers who only run `validate` / `build` / `mcp` shouldn't
+1. Relay consumers who only run `validate` / `build` / `mcp` shouldn't
    download a multi-MB Vulkan binary.
-2. Renderer release cadence is decoupled from CLI release cadence.
+2. Renderer release cadence is decoupled from relay release cadence.
 3. The Inno installer has a different release surface (code signing,
    uninstall, Start Menu entries, URL-handler registration) that
    doesn't belong in an npm package.
@@ -79,7 +79,7 @@ Both channels ship the **same exe** built by the same CI job — see the
 ## Local development
 
 ```bash
-# from tools/nuna-cli
+# from tools/relay
 pnpm install
 pnpm dev -- serve --verbose       # run from source
 pnpm build                        # tsc → dist/
