@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<nuna-serve xmlns="https://nuna.dev/schemas/serve/v1"
+            host="localhost" port="3001">
+
+  <!-- Statically hosted content roots -->
+  <static>
+    <root alias="game"  path="."              mount="/games/current/v-dev/"/>
+    <root alias="kit"   path="../nuna-kit"    mount="/kit/v-dev/"/>
+    <root alias="mods"  path="./mods"         mount="/mods/"  optional="true"/>
+  </static>
+
+  <!-- Connected domain servers (advertised, not proxied) -->
+  <servers>
+    <server alias="game-server"
+            url="ws://localhost:8080/ws"
+            kind="gameplay"
+            required="false"/>
+    <server alias="persistence"
+            url="http://localhost:8081"
+            kind="save-load"
+            required="false"/>
+    <server alias="marketplace"
+            url="https://marketplace.nuna.dev"
+            kind="kit-registry"
+            required="false"/>
+  </servers>
+
+  <!-- Kit-source alias mapping (fed into /discover.json) -->
+  <sources>
+    <source alias="first-party" ref="static:kit"/>
+    <source alias="game"        ref="static:game"/>
+    <source alias="user-mods"   ref="static:mods"/>
+    <source alias="online"      ref="server:marketplace"/>
+  </sources>
+
+</nuna-serve>

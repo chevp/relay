@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>nuna-cli — Install Guide</title>
+<style>
+  :root {
+    --bg: #0e1116;
+    --bg-elev: #161b22;
+    --border: #30363d;
+    --fg: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-2: #7ee787;
+    --warn: #f0883e;
+    --code-bg: #1c222b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+    font-size: 16px;
+  }
+  .wrap {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 48px 24px 96px;
+  }
+  header {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 24px;
+    margin-bottom: 32px;
+  }
+  h1 {
+    margin: 0 0 8px 0;
+    font-size: 32px;
+    letter-spacing: -0.02em;
+  }
+  h1 .badge {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--muted);
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 2px 10px;
+    vertical-align: middle;
+    margin-left: 8px;
+  }
+  h2 {
+    margin: 40px 0 12px;
+    font-size: 22px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 6px;
+  }
+  h3 {
+    margin: 24px 0 8px;
+    font-size: 17px;
+    color: var(--accent);
+  }
+  p, li { color: var(--fg); }
+  .lead { color: var(--muted); font-size: 17px; margin-top: 0; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 13.5px;
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    margin: 12px 0;
+  }
+  pre code {
+    background: transparent;
+    border: none;
+    padding: 0;
+    font-size: 13.5px;
+    color: var(--fg);
+  }
+  .note, .warn {
+    border-left: 3px solid var(--accent);
+    background: var(--bg-elev);
+    padding: 12px 16px;
+    margin: 16px 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .warn {
+    border-left-color: var(--warn);
+  }
+  .note strong { color: var(--accent); }
+  .warn strong { color: var(--warn); }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+    font-size: 14.5px;
+  }
+  th, td {
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  th { color: var(--muted); font-weight: 500; }
+  td code { font-size: 13px; }
+  .toc {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 20px;
+    margin: 24px 0 32px;
+  }
+  .toc h4 {
+    margin: 0 0 8px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .toc ol {
+    margin: 0;
+    padding-left: 22px;
+  }
+  .toc li { margin: 2px 0; }
+  .step-num {
+    display: inline-block;
+    width: 24px;
+    height: 24px;
+    line-height: 24px;
+    text-align: center;
+    background: var(--accent);
+    color: var(--bg);
+    border-radius: 50%;
+    font-weight: 600;
+    font-size: 13px;
+    margin-right: 8px;
+  }
+  hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 32px 0;
+  }
+  footer {
+    margin-top: 64px;
+    color: var(--muted);
+    font-size: 13px;
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+  }
+  kbd {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-family: ui-monospace, SFMono-Regular, monospace;
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>nuna-cli <span class="badge">v0.2.0</span></h1>
+  <p class="lead">Install the unified <code>nuna</code> CLI on your machine — the dev entrypoint for the Nuna runtime (serve, open, build, validate, mcp, story).</p>
+</header>
+
+<div class="toc">
+  <h4>Contents</h4>
+  <ol>
+    <li><a href="#prereqs">Prerequisites</a></li>
+    <li><a href="#install">Install (recommended: pnpm link)</a></li>
+    <li><a href="#alt-install">Alternative install methods</a></li>
+    <li><a href="#verify">Verify the install</a></li>
+    <li><a href="#commands">Commands at a glance</a></li>
+    <li><a href="#update">Updating &amp; uninstalling</a></li>
+    <li><a href="#troubleshoot">Troubleshooting</a></li>
+  </ol>
+</div>
+
+<h2 id="prereqs">1. Prerequisites</h2>
+<table>
+  <tr><th>Requirement</th><th>Version</th><th>Notes</th></tr>
+  <tr>
+    <td><strong>Node.js</strong></td>
+    <td>&ge; 20</td>
+    <td>Declared in <code>package.json &gt; engines.node</code>. Check with <code>node --version</code>.</td>
+  </tr>
+  <tr>
+    <td><strong>pnpm</strong></td>
+    <td>&ge; 8</td>
+    <td>The repo ships a <code>pnpm-lock.yaml</code>. Install with <code>npm i -g pnpm</code> if missing.</td>
+  </tr>
+  <tr>
+    <td><strong>Git checkout</strong></td>
+    <td>—</td>
+    <td>The package is <strong>not on npm</strong> (<code>license: UNLICENSED</code>). You install from this repo.</td>
+  </tr>
+</table>
+
+<div class="warn">
+  <strong>Why no <code>npm install -g @nuna/cli</code>?</strong> The package is private and not published to a registry. Install always happens from a local clone of <code>nuna/nuna/tools/nuna-cli/</code>.
+</div>
+
+<h2 id="install">2. Install (recommended: pnpm link)</h2>
+<p>This is the fastest workflow for a developer who also touches the CLI source. It puts <code>nuna</code> on your <code>PATH</code> as a symlink into the repo, so a rebuild is enough to pick up your changes — no reinstall.</p>
+
+<h3><span class="step-num">1</span>Install dependencies</h3>
+<pre><code>cd c:/chevp/nuna/nuna/tools/nuna-cli
+pnpm install</code></pre>
+
+<h3><span class="step-num">2</span>Build the CLI</h3>
+<p>The <code>bin</code> entry points to <code>./dist/cli.js</code>, so you need a TypeScript build before linking:</p>
+<pre><code>pnpm build</code></pre>
+<p>This runs <code>tsc</code> and produces <code>dist/cli.js</code> (and the rest of the compiled tree).</p>
+
+<h3><span class="step-num">3</span>Link the binary globally</h3>
+<pre><code>pnpm link --global</code></pre>
+<p>That registers the package globally and creates a <code>nuna</code> shim on your <code>PATH</code> pointing at <code>dist/cli.js</code>.</p>
+
+<div class="note">
+  <strong>Windows note.</strong> If <code>nuna</code> is not found after linking, your global pnpm bin folder is not on <code>PATH</code>. Run <code>pnpm config get global-bin-dir</code> and add the printed folder (typically <code>%LOCALAPPDATA%\pnpm</code>) to <code>PATH</code>, then open a new terminal.
+</div>
+
+<h2 id="alt-install">3. Alternative install methods</h2>
+
+<h3>3a. npm global install (no link)</h3>
+<p>Same outcome, no symlink — re-run on each rebuild:</p>
+<pre><code>cd c:/chevp/nuna/nuna/tools/nuna-cli
+pnpm install
+pnpm build
+npm install -g .</code></pre>
+
+<h3>3b. Run from source without installing</h3>
+<p>For one-off use, skip the build entirely and run TypeScript directly via <code>tsx</code>:</p>
+<pre><code>cd c:/chevp/nuna/nuna/tools/nuna-cli
+pnpm install
+pnpm dev -- serve --port 8080
+# or
+pnpm dev -- open ./games/my-game</code></pre>
+<p>The <code>--</code> separates pnpm flags from the args forwarded to <code>nuna</code>.</p>
+
+<h3>3c. Run the built bundle directly</h3>
+<p>If you do not want it on <code>PATH</code> at all:</p>
+<pre><code>node c:/chevp/nuna/nuna/tools/nuna-cli/dist/cli.js serve</code></pre>
+
+<h2 id="verify">4. Verify the install</h2>
+<pre><code>nuna --version
+# 0.2.0
+
+nuna --help
+# Usage: nuna [options] [command]
+#   serve     Start the Nuna dev HTTP server for the current game repo
+#   open      Open a game in the Nuna player (combo: serve + nuna://play)
+#   test      ...
+#   build     ...
+#   validate  ...
+#   mcp       ...
+#   story     ...</code></pre>
+
+<p>Smoke test in a game folder:</p>
+<pre><code>cd c:/chevp/nuna/nuna/games/my-game
+nuna serve --port 8080</code></pre>
+<p>You should see a banner with the bind address, static roots, discovery URL (<code>http://localhost:8080/discover.json</code>) and health URL.</p>
+
+<h2 id="commands">5. Commands at a glance</h2>
+<table>
+  <tr><th>Command</th><th>Status</th><th>Purpose</th></tr>
+  <tr><td><code>nuna serve</code></td><td>implemented</td><td>Dev HTTP server for the current game repo (replaces the old <code>nuna-serve</code> bin).</td></tr>
+  <tr><td><code>nuna open [path|url]</code></td><td>implemented</td><td>Combo mode: starts the dev server <em>and</em> launches <code>nuna://play?discovery=...</code> in <code>nuna-player.exe</code>. <kbd>Ctrl</kbd>+<kbd>C</kbd> stops both. With an <code>http(s)://</code> arg, just hands the URL to the OS handler.</td></tr>
+  <tr><td><code>nuna test</code></td><td>stub</td><td>Reserved for MCP test mode.</td></tr>
+  <tr><td><code>nuna build</code></td><td>stub</td><td>Reserved for the game build pipeline.</td></tr>
+  <tr><td><code>nuna validate</code></td><td>stub</td><td>Reserved for game validation.</td></tr>
+  <tr><td><code>nuna mcp</code></td><td>stub</td><td>Reserved for the MCP server (subsumes the planned <code>frost.exe</code>).</td></tr>
+  <tr><td><code>nuna story</code></td><td>stub</td><td>Reserved for story-tooling.</td></tr>
+</table>
+
+<h3>Common <code>nuna serve</code> flags</h3>
+<pre><code>nuna serve \
+  --port 8080 \
+  --host 0.0.0.0 \
+  --config ./nuna-serve.xml \
+  --assets ./assets-export \
+  --configs ./configs \
+  --watch \
+  --verbose</code></pre>
+
+<h2 id="update">6. Updating &amp; uninstalling</h2>
+
+<h3>Update after a <code>git pull</code></h3>
+<pre><code>cd c:/chevp/nuna/nuna/tools/nuna-cli
+pnpm install
+pnpm build</code></pre>
+<p>If you used <code>pnpm link --global</code>, that is enough — the symlink picks up the new <code>dist/</code>. If you used <code>npm install -g .</code>, re-run that step.</p>
+
+<h3>Uninstall</h3>
+<pre><code># If installed via pnpm link --global
+pnpm uninstall --global @nuna/cli
+
+# If installed via npm install -g .
+npm uninstall -g @nuna/cli</code></pre>
+
+<h2 id="troubleshoot">7. Troubleshooting</h2>
+
+<h3><code>nuna: command not found</code> after linking</h3>
+<p>The pnpm global bin folder is not on <code>PATH</code>.</p>
+<pre><code>pnpm config get global-bin-dir</code></pre>
+<p>Add the printed folder to <code>PATH</code> (Windows: System Properties &rarr; Environment Variables; macOS/Linux: append to <code>~/.zshrc</code> or <code>~/.bashrc</code>). Open a new terminal.</p>
+
+<h3><code>Cannot find module '.../dist/cli.js'</code></h3>
+<p>You linked before building. Run <code>pnpm build</code> in <code>tools/nuna-cli/</code>.</p>
+
+<h3>Permission errors on <code>npm install -g .</code> (macOS/Linux)</h3>
+<p>Either prefix with <code>sudo</code>, or — better — use a Node-version manager (nvm, fnm, volta) so the global prefix lives in your home directory.</p>
+
+<h3>Port already in use</h3>
+<pre><code>nuna serve --port 8081</code></pre>
+
+<h3>It opens a browser instead of <code>nuna-player.exe</code></h3>
+<p>The <code>nuna://</code> protocol handler is registered by the <code>nuna-player</code> Windows installer (<code>nuna-player-setup.exe</code>). Without it the OS has no handler and falls back to a browser. Install the player first, then retry <code>nuna open</code>.</p>
+
+<footer>
+  Source: <code>tools/nuna-cli/</code> &nbsp;&middot;&nbsp; Package: <code>@nuna/cli</code> &nbsp;&middot;&nbsp; Bin: <code>nuna</code> &nbsp;&middot;&nbsp; Author: Patrice Chevillat
+</footer>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>nuna CLI — serve</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            arctic: {
+              50: '#f0f9ff',
+              100: '#e0f2fe',
+              200: '#bae6fd',
+              300: '#7dd3fc',
+              400: '#38bdf8',
+              500: '#0ea5e9',
+              600: '#0284c7',
+              700: '#0369a1',
+              800: '#075985',
+              900: '#0c4a6e',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    code, .mono { font-family: 'JetBrains Mono', monospace; }
+
+    .diagonal-stripes {
+      background-image: repeating-linear-gradient(
+        45deg, transparent, transparent 10px,
+        rgba(255, 255, 255, 0.02) 10px, rgba(255, 255, 255, 0.02) 20px
+      );
+    }
+
+    .grid-bg {
+      background-image:
+        linear-gradient(rgba(59, 130, 246, 0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(59, 130, 246, 0.05) 1px, transparent 1px);
+      background-size: 20px 20px;
+    }
+
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .gradient-text {
+      background: linear-gradient(135deg, #f97316 0%, #ea580c 50%, #c2410c 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .gradient-text-blue {
+      background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 50%, #2563eb 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .gradient-text-green {
+      background: linear-gradient(135deg, #4ade80 0%, #22c55e 50%, #16a34a 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hover-glow { transition: all 0.3s ease; }
+    .hover-glow:hover {
+      box-shadow: 0 0 20px rgba(249, 115, 22, 0.4);
+      transform: translateY(-2px);
+    }
+
+    .card {
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: linear-gradient(135deg, rgba(249, 115, 22, 0.1), rgba(234, 88, 12, 0.1));
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    .card:hover::before { opacity: 1; }
+    .card:hover {
+      transform: translateY(-2px);
+      border-color: rgba(249, 115, 22, 0.5);
+      box-shadow: 0 4px 12px rgba(249, 115, 22, 0.3);
+    }
+
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+    }
+
+    .code-block {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 0.75rem;
+      padding: 1.25rem;
+      overflow-x: auto;
+    }
+    .code-block code {
+      font-size: 0.8rem;
+      line-height: 1.6;
+      color: #e2e8f0;
+      white-space: pre;
+    }
+    .code-block .comment { color: #64748b; }
+    .code-block .flag { color: #f97316; }
+    .code-block .value { color: #4ade80; }
+    .code-block .url { color: #38bdf8; }
+
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.05); }
+    ::-webkit-scrollbar-thumb { background: rgba(249, 115, 22, 0.3); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(249, 115, 22, 0.5); }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen grid-bg">
+
+  <!-- Header -->
+  <header class="h-16 glass border-b border-slate-700/50 flex items-center justify-between px-6 diagonal-stripes sticky top-0 z-50">
+    <div class="flex items-center gap-4">
+      <span class="material-symbols-outlined text-orange-400 text-3xl">dns</span>
+      <h1 class="text-xl font-bold gradient-text">nuna CLI</h1>
+      <span class="text-slate-600 text-xs mono">v0.1.0</span>
+    </div>
+    <div class="flex items-center gap-4">
+      <a href="#quickstart" class="text-slate-400 hover:text-slate-200 transition-colors text-sm">Quickstart</a>
+      <a href="#cli" class="text-slate-400 hover:text-slate-200 transition-colors text-sm">CLI</a>
+      <a href="#config" class="text-slate-400 hover:text-slate-200 transition-colors text-sm">Config</a>
+      <a href="#discovery" class="text-slate-400 hover:text-slate-200 transition-colors text-sm">Discovery</a>
+      <a href="#architecture" class="text-slate-400 hover:text-slate-200 transition-colors text-sm">Architecture</a>
+      <a href="https://github.com/chevp/nuna" target="_blank" class="text-slate-400 hover:text-slate-200 transition-colors">
+        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+      </a>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <section class="max-w-4xl mx-auto px-6 pt-20 pb-16 text-center">
+    <h2 class="text-4xl md:text-5xl font-bold mb-4">
+      <span class="gradient-text">Dev-time HTTP server<br>for Nuna game repos</span>
+    </h2>
+    <p class="text-slate-400 text-lg max-w-2xl mx-auto mb-3">
+      The HTTP layer between your game repo and the renderer.<br>
+      Static assets &middot; Discovery &middot; SHA-256 manifests &middot; File watching.
+    </p>
+    <p class="text-slate-600 text-sm">TypeScript/Node.js &middot; Cross-platform &middot; Config-driven via XML</p>
+
+    <!-- Quick install -->
+    <div class="max-w-md mx-auto mt-8">
+      <div class="code-block text-left">
+        <code><span class="comment"># Run from any game repo root</span><br>pnpm exec <span class="flag">nuna serve</span></code>
+      </div>
+    </div>
+  </section>
+
+  <!-- How It Works -->
+  <section class="max-w-4xl mx-auto px-6 py-12">
+    <h2 class="text-2xl font-bold text-center mb-2 gradient-text">How It Works</h2>
+    <p class="text-slate-500 text-center text-sm mb-8">Config-driven server that bridges game repos and the Nuna runtime</p>
+
+    <div class="max-w-3xl mx-auto mb-8">
+      <div class="glass rounded-xl p-5">
+        <div class="flex flex-col md:flex-row items-center justify-center gap-3 text-sm">
+          <div class="glass rounded-lg px-4 py-3 text-center hover-glow">
+            <span class="material-symbols-outlined text-orange-400 text-xl block mb-1">folder_open</span>
+            <span class="text-slate-200 font-medium text-xs">Game Repo</span>
+            <p class="text-slate-500 text-[10px] mt-0.5">assets + configs</p>
+          </div>
+          <span class="text-slate-600 text-lg hidden md:block">&rarr;</span>
+          <span class="text-slate-600 text-lg block md:hidden">&darr;</span>
+          <div class="glass rounded-lg px-4 py-3 text-center hover-glow">
+            <span class="material-symbols-outlined text-orange-400 text-xl block mb-1">settings_suggest</span>
+            <span class="text-slate-200 font-medium text-xs">nuna-serve.xml</span>
+            <p class="text-slate-500 text-[10px] mt-0.5">mounts + servers</p>
+          </div>
+          <span class="text-slate-600 text-lg hidden md:block">&rarr;</span>
+          <span class="text-slate-600 text-lg block md:hidden">&darr;</span>
+          <div class="glass rounded-lg px-4 py-3 text-center hover-glow">
+            <span class="material-symbols-outlined text-orange-400 text-xl block mb-1">dns</span>
+            <span class="text-slate-200 font-medium text-xs">HTTP Server</span>
+            <p class="text-slate-500 text-[10px] mt-0.5">:3001</p>
+          </div>
+          <span class="text-slate-600 text-lg hidden md:block">&rarr;</span>
+          <span class="text-slate-600 text-lg block md:hidden">&darr;</span>
+          <div class="glass rounded-lg px-4 py-3 text-center hover-glow">
+            <span class="material-symbols-outlined text-orange-400 text-xl block mb-1">language</span>
+            <span class="text-slate-200 font-medium text-xs">/discover.json</span>
+            <p class="text-slate-500 text-[10px] mt-0.5">all endpoints</p>
+          </div>
+          <span class="text-slate-600 text-lg hidden md:block">&rarr;</span>
+          <span class="text-slate-600 text-lg block md:hidden">&darr;</span>
+          <div class="glass rounded-lg px-4 py-3 text-center hover-glow">
+            <span class="material-symbols-outlined text-green-400 text-xl block mb-1">sports_esports</span>
+            <span class="text-slate-200 font-medium text-xs">Renderer</span>
+            <p class="text-slate-500 text-[10px] mt-0.5">nuna-player</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Quickstart -->
+  <section id="quickstart" class="max-w-4xl mx-auto px-6 py-12">
+    <h2 class="text-2xl font-bold text-center mb-2 gradient-text">Quickstart</h2>
+    <p class="text-slate-500 text-center text-sm mb-8">Up and running in 3 steps</p>
+
+    <div class="max-w-2xl mx-auto space-y-4">
+      <div class="glass rounded-xl p-5">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-orange-500/20 text-orange-400 text-sm font-bold">1</span>
+          <h3 class="font-semibold text-slate-100 text-sm">Install</h3>
+        </div>
+        <div class="code-block">
+          <code><span class="comment"># From nuna monorepo</span><br>cd tools/nuna-cli<br>pnpm install</code>
+        </div>
+      </div>
+      <div class="glass rounded-xl p-5">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-orange-500/20 text-orange-400 text-sm font-bold">2</span>
+          <h3 class="font-semibold text-slate-100 text-sm">Start the server</h3>
+        </div>
+        <div class="code-block">
+          <code><span class="comment"># From any game repo root</span><br>pnpm exec <span class="flag">nuna serve</span><br><br><span class="comment"># Or open in player (combo: serve + nuna://play)</span><br>pnpm exec <span class="flag">nuna open</span></code>
+        </div>
+      </div>
+      <div class="glass rounded-xl p-5">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-green-500/20 text-green-400 text-sm font-bold">3</span>
+          <h3 class="font-semibold text-slate-100 text-sm">Verify</h3>
+        </div>
+        <div class="code-block">
+          <code>curl <span class="url">http://localhost:3001/discover.json</span><br>curl <span class="url">http://localhost:3001/health</span></code>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CLI Reference -->
+  <section id="cli" class="max-w-4xl mx-auto px-6 py-12">
+    <h2 class="text-2xl font-bold text-center mb-2 gradient-text">CLI Reference</h2>
+    <p class="text-slate-500 text-center text-sm mb-8">All flags and options</p>
+
+    <div class="code-block max-w-2xl mx-auto mb-8">
+      <code>nuna serve <span class="comment">[options]</span></code>
+    </div>
+
+    <div class="max-w-3xl mx-auto">
+      <div class="glass rounded-xl overflow-hidden">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-slate-700/50">
+              <th class="text-left px-5 py-3 text-slate-400 font-medium text-xs">Flag</th>
+              <th class="text-left px-5 py-3 text-slate-400 font-medium text-xs">Default</th>
+              <th class="text-left px-5 py-3 text-slate-400 font-medium text-xs">Description</th>
+            </tr>
+          </thead>
+          <tbody class="text-xs">
+            <tr class="border-b border-slate-800/50">
+              <td class="px-5 py-3"><code class="mono text-orange-300">-p, --port &lt;n&gt;</code></td>
+              <td class="px-5 py-3 text-slate-500 mono">3001</td>
+              <td class="px-5 py-3 text-slate-400">HTTP port to bind</td>
+            </tr>
+            <tr class="border-b border-slate-800/50">
+              <td class="px-5 py-3"><code class="mono text-orange-300">-h, --host &lt;addr&gt;</code></td>
+              <td class="px-5 py-3 text-slate-500 mono">0.0.0.0</td>
+              <td class="px-5 py-3 text-slate-400">Host address to bind</td>
+            </tr>
+            <tr class="border-b border-slate-800/50">
+              <td class="px-5 py-3"><code class="mono text-orange-300">-c, --config &lt;path&gt;</code></td>
+              <td class="px-5 py-3 text-slate-500 mono">./nuna-serve.xml</td>
+              <td class="px-5 py-3 text-slate-400">Path to XML config file</td>
+            </tr>
+            <tr class="border-b border-slate-800/50">
+              <td class="px-5 py-3"><code class="mono text-orange-300">-a, --assets &lt;path&gt;</code></td>
+              <td class="px-5 py-3 text-slate-500 mono">./assets-export</td>
+              <td class="px-5 py-3 text-slate-400">Exported assets directory (not source files)</td>
+            </tr>
+            <tr class="border-b border-slate-800/50">
+              <td class="px-5 py-3"><code class="mono text-orange-300">--configs &lt;path&gt;</code></td>
+              <td class="px-5 py-3 text-slate-500 mono">./configs</td>
+              <td class="px-5 py-3 text-slate-400">Game configs directory (JSON/YAML)</td>
+            </tr>
+            <tr class="border-b border-slate-800/50">
+              <td class="px-5 py-3"><code class="mono text-orange-300">--open</code></td>
+              <td class="px-5 py-3 text-slate-500 mono">false</td>
+              <td class="px-5 py-3 text-slate-400">Launch <code class="mono">nuna://play?discovery=...</code> via OS handler</td>
+            </tr>
+            <tr class="border-b border-slate-800/50">
+              <td class="px-5 py-3"><code class="mono text-orange-300">--watch</code></td>
+              <td class="px-5 py-3 text-slate-500 mono">false</td>
+              <td class="px-5 py-3 text-slate-400">Regenerate manifests on file change (debounced 500ms)</td>
+            </tr>
+            <tr class="border-b border-slate-800/50">
+              <td class="px-5 py-3"><code class="mono text-orange-300">--verbose</code></td>
+              <td class="px-5 py-3 text-slate-500 mono">false</td>
+              <td class="px-5 py-3 text-slate-400">Enable HTTP request logging</td>
+            </tr>
+            <tr class="border-b border-slate-800/50">
+              <td class="px-5 py-3"><code class="mono text-orange-300">--no-color</code></td>
+              <td class="px-5 py-3 text-slate-500">&mdash;</td>
+              <td class="px-5 py-3 text-slate-400">Disable ANSI color output</td>
+            </tr>
+            <tr class="border-b border-slate-800/50">
+              <td class="px-5 py-3"><code class="mono text-orange-300">--version</code></td>
+              <td class="px-5 py-3 text-slate-500">&mdash;</td>
+              <td class="px-5 py-3 text-slate-400">Print version and exit</td>
+            </tr>
+            <tr>
+              <td class="px-5 py-3"><code class="mono text-orange-300">--help</code></td>
+              <td class="px-5 py-3 text-slate-500">&mdash;</td>
+              <td class="px-5 py-3 text-slate-400">Print usage and exit</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- Asset Pipeline -->
+  <section class="max-w-4xl mx-auto px-6 py-12">
+    <h2 class="text-2xl font-bold text-center mb-2 gradient-text">Asset Pipeline</h2>
+    <p class="text-slate-500 text-center text-sm mb-8">Clear separation between authoring, export, and serving</p>
+
+    <div class="max-w-3xl mx-auto mb-8">
+      <div class="max-w-2xl mx-auto space-y-0">
+        <!-- Source (not served) -->
+        <div class="rounded-t-xl border border-slate-600/30 bg-slate-800/20 p-5">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="material-symbols-outlined text-slate-500 text-lg">block</span>
+            <span class="text-slate-500 font-semibold text-sm">assets-source/</span>
+            <span class="text-red-400 text-[10px] ml-auto">NOT served</span>
+          </div>
+          <p class="text-slate-600 text-xs">Blender (.blend), Photoshop (.psd) &mdash; stay local, never served.</p>
+        </div>
+        <!-- Export (served as assets) -->
+        <div class="border border-t-0 border-orange-500/30 bg-orange-500/5 p-5">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="material-symbols-outlined text-orange-400 text-lg">inventory</span>
+            <span class="text-orange-400 font-semibold text-sm">assets-export/</span>
+            <span class="text-green-400 text-[10px] ml-auto">served at /assets/</span>
+          </div>
+          <div class="grid grid-cols-3 gap-2 mt-2">
+            <div class="bg-black/20 rounded-lg px-3 py-2 text-center">
+              <span class="text-orange-300 text-xs mono">.gltf</span>
+            </div>
+            <div class="bg-black/20 rounded-lg px-3 py-2 text-center">
+              <span class="text-orange-300 text-xs mono">.png</span>
+            </div>
+            <div class="bg-black/20 rounded-lg px-3 py-2 text-center">
+              <span class="text-orange-300 text-xs mono">.mat</span>
+            </div>
+          </div>
+          <p class="text-slate-600 text-[10px] mt-2">Cache-Control: max-age=31536000 (immutable, hash-versioned)</p>
+        </div>
+        <!-- Configs (served separately) -->
+        <div class="rounded-b-xl border border-t-0 border-blue-500/30 bg-blue-500/5 p-5">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="material-symbols-outlined text-blue-400 text-lg">tune</span>
+            <span class="text-blue-400 font-semibold text-sm">configs/</span>
+            <span class="text-green-400 text-[10px] ml-auto">served at /configs/</span>
+          </div>
+          <div class="grid grid-cols-2 gap-2 mt-2">
+            <div class="bg-black/20 rounded-lg px-3 py-2 text-center">
+              <span class="text-blue-300 text-xs mono">.json</span>
+            </div>
+            <div class="bg-black/20 rounded-lg px-3 py-2 text-center">
+              <span class="text-blue-300 text-xs mono">.yaml</span>
+            </div>
+          </div>
+          <p class="text-slate-600 text-[10px] mt-2">Cache-Control: no-cache (dynamic, live-editable)</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Authoring warning -->
+    <div class="glass rounded-xl p-5 max-w-2xl mx-auto border-yellow-500/30">
+      <div class="flex items-start gap-3">
+        <span class="material-symbols-outlined text-yellow-400 text-xl mt-0.5">warning</span>
+        <div>
+          <h3 class="font-semibold text-slate-100 text-sm mb-1">Authoring Format Detection</h3>
+          <p class="text-slate-400 text-xs">On startup, nuna-serve scans static roots for source files (<code class="mono text-yellow-300">.blend</code>, <code class="mono text-yellow-300">.psd</code>, <code class="mono text-yellow-300">.ai</code>, <code class="mono text-yellow-300">.sketch</code>) and emits a warning. These files belong in <code class="mono">assets-source/</code>, not in served paths.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- XML Config -->
+  <section id="config" class="max-w-4xl mx-auto px-6 py-12">
+    <h2 class="text-2xl font-bold text-center mb-2 gradient-text">XML Configuration</h2>
+    <p class="text-slate-500 text-center text-sm mb-8">Declarative server config via <code class="mono text-slate-400">nuna-serve.xml</code></p>
+
+    <div class="max-w-3xl mx-auto mb-8">
+      <div class="code-block">
+        <code><span class="comment">&lt;?xml version="1.0" encoding="UTF-8"?&gt;</span>
+&lt;<span class="flag">nuna-serve</span> xmlns=<span class="value">"https://nuna.dev/schemas/serve/v1"</span>
+            host=<span class="value">"localhost"</span> port=<span class="value">"3001"</span>&gt;
+
+  <span class="comment">&lt;!-- Statically hosted content roots --&gt;</span>
+  &lt;<span class="flag">static</span>&gt;
+    &lt;root alias=<span class="value">"game"</span>  path=<span class="value">"."</span>            mount=<span class="value">"/games/current/v-dev/"</span>/&gt;
+    &lt;root alias=<span class="value">"kit"</span>   path=<span class="value">"../nuna-kit"</span>  mount=<span class="value">"/kit/v-dev/"</span>/&gt;
+    &lt;root alias=<span class="value">"mods"</span>  path=<span class="value">"./mods"</span>       mount=<span class="value">"/mods/"</span>  optional=<span class="value">"true"</span>/&gt;
+  &lt;/<span class="flag">static</span>&gt;
+
+  <span class="comment">&lt;!-- Connected domain servers (advertised, not proxied) --&gt;</span>
+  &lt;<span class="flag">servers</span>&gt;
+    &lt;server alias=<span class="value">"game-server"</span>
+            url=<span class="url">"ws://localhost:8080/ws"</span>
+            kind=<span class="value">"gameplay"</span>
+            required=<span class="value">"false"</span>/&gt;
+    &lt;server alias=<span class="value">"persistence"</span>
+            url=<span class="url">"http://localhost:8081"</span>
+            kind=<span class="value">"save-load"</span>
+            required=<span class="value">"false"</span>/&gt;
+  &lt;/<span class="flag">servers</span>&gt;
+
+  <span class="comment">&lt;!-- Kit-source alias mapping --&gt;</span>
+  &lt;<span class="flag">sources</span>&gt;
+    &lt;source alias=<span class="value">"first-party"</span> ref=<span class="value">"static:kit"</span>/&gt;
+    &lt;source alias=<span class="value">"game"</span>        ref=<span class="value">"static:game"</span>/&gt;
+  &lt;/<span class="flag">sources</span>&gt;
+
+&lt;/<span class="flag">nuna-serve</span>&gt;</code>
+      </div>
+    </div>
+
+    <!-- Config sections -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-3xl mx-auto">
+      <div class="card glass rounded-xl p-5">
+        <div class="relative z-10">
+          <span class="material-symbols-outlined text-orange-400 text-2xl mb-2 block">folder</span>
+          <h3 class="font-semibold text-slate-100 text-sm mb-2">&lt;static&gt;</h3>
+          <p class="text-slate-500 text-xs">Mount filesystem directories as HTTP paths. Each root gets its own <code class="mono text-slate-400">manifest.json</code>.</p>
+          <div class="mt-2 space-y-1">
+            <p class="text-slate-600 text-[10px]"><code class="mono">alias</code> &mdash; logical name</p>
+            <p class="text-slate-600 text-[10px]"><code class="mono">path</code> &mdash; filesystem path</p>
+            <p class="text-slate-600 text-[10px]"><code class="mono">mount</code> &mdash; HTTP prefix</p>
+            <p class="text-slate-600 text-[10px]"><code class="mono">optional</code> &mdash; skip if missing</p>
+          </div>
+        </div>
+      </div>
+      <div class="card glass rounded-xl p-5">
+        <div class="relative z-10">
+          <span class="material-symbols-outlined text-orange-400 text-2xl mb-2 block">cloud</span>
+          <h3 class="font-semibold text-slate-100 text-sm mb-2">&lt;servers&gt;</h3>
+          <p class="text-slate-500 text-xs">Advertise connected domain servers. nuna-serve announces them, the renderer connects directly.</p>
+          <div class="mt-2 space-y-1">
+            <p class="text-slate-600 text-[10px]"><code class="mono">alias</code> &mdash; logical name</p>
+            <p class="text-slate-600 text-[10px]"><code class="mono">url</code> &mdash; http/ws endpoint</p>
+            <p class="text-slate-600 text-[10px]"><code class="mono">kind</code> &mdash; role tag</p>
+            <p class="text-slate-600 text-[10px]"><code class="mono">required</code> &mdash; ping on startup</p>
+          </div>
+        </div>
+      </div>
+      <div class="card glass rounded-xl p-5">
+        <div class="relative z-10">
+          <span class="material-symbols-outlined text-orange-400 text-2xl mb-2 block">link</span>
+          <h3 class="font-semibold text-slate-100 text-sm mb-2">&lt;sources&gt;</h3>
+          <p class="text-slate-500 text-xs">Map logical source aliases to static roots or servers. The renderer resolves these at runtime.</p>
+          <div class="mt-2 space-y-1">
+            <p class="text-slate-600 text-[10px]"><code class="mono">alias</code> &mdash; source name</p>
+            <p class="text-slate-600 text-[10px]"><code class="mono">ref</code> &mdash; <code class="mono">static:&lt;x&gt;</code> or <code class="mono">server:&lt;x&gt;</code></p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- No-config fallback -->
+    <div class="glass rounded-xl p-5 max-w-2xl mx-auto mt-8">
+      <div class="flex items-start gap-3">
+        <span class="material-symbols-outlined text-blue-400 text-xl mt-0.5">info</span>
+        <div>
+          <h3 class="font-semibold text-slate-100 text-sm mb-1">No config? No problem.</h3>
+          <p class="text-slate-400 text-xs">If no <code class="mono text-slate-300">nuna-serve.xml</code> is found, nuna-serve auto-generates a minimal config: CWD as <code class="mono text-slate-300">"game"</code> root, <code class="mono text-slate-300">assets-export/</code> as assets, and <code class="mono text-slate-300">configs/</code> as game configs.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Discovery -->
+  <section id="discovery" class="max-w-4xl mx-auto px-6 py-12">
+    <h2 class="text-2xl font-bold text-center mb-2 gradient-text">Discovery Endpoint</h2>
+    <p class="text-slate-500 text-center text-sm mb-8">Single URL that describes the entire dev environment</p>
+
+    <div class="max-w-3xl mx-auto mb-8">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="inline-flex items-center justify-center px-2 py-1 rounded bg-green-500/20 text-green-400 text-[10px] mono font-bold">GET</span>
+        <code class="mono text-slate-300 text-sm">/discover.json</code>
+      </div>
+      <div class="code-block">
+        <code>{
+  <span class="flag">"nunaServe"</span>: { <span class="value">"version"</span>: "0.1.0", <span class="value">"host"</span>: "localhost", <span class="value">"port"</span>: 3001 },
+  <span class="flag">"static"</span>: {
+    <span class="value">"game"</span>: { "url": <span class="url">"http://localhost:3001/games/current/v-dev/"</span>, "alias": "game" },
+    <span class="value">"kit"</span>:  { "url": <span class="url">"http://localhost:3001/kit/v-dev/"</span>, "alias": "kit" }
+  },
+  <span class="flag">"servers"</span>: {
+    <span class="value">"game-server"</span>: { "url": <span class="url">"ws://localhost:8080/ws"</span>, "kind": "gameplay", "required": true }
+  },
+  <span class="flag">"sources"</span>: {
+    <span class="value">"first-party"</span>: "static:kit",
+    <span class="value">"game"</span>:        "static:game"
+  }
+}</code>
+      </div>
+    </div>
+
+    <!-- Endpoints grid -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-3xl mx-auto">
+      <div class="glass rounded-xl p-5 hover-glow">
+        <div class="flex items-center gap-2 mb-2">
+          <span class="inline-flex items-center justify-center px-2 py-1 rounded bg-green-500/20 text-green-400 text-[10px] mono font-bold">GET</span>
+          <code class="mono text-slate-300 text-xs">/discover.json</code>
+        </div>
+        <p class="text-slate-500 text-xs">All mounts, servers, and source mappings in one document.</p>
+      </div>
+      <div class="glass rounded-xl p-5 hover-glow">
+        <div class="flex items-center gap-2 mb-2">
+          <span class="inline-flex items-center justify-center px-2 py-1 rounded bg-green-500/20 text-green-400 text-[10px] mono font-bold">GET</span>
+          <code class="mono text-slate-300 text-xs">/health</code>
+        </div>
+        <p class="text-slate-500 text-xs">Health check. Returns <code class="mono text-slate-400">{ status: "ok" }</code>.</p>
+      </div>
+      <div class="glass rounded-xl p-5 hover-glow">
+        <div class="flex items-center gap-2 mb-2">
+          <span class="inline-flex items-center justify-center px-2 py-1 rounded bg-green-500/20 text-green-400 text-[10px] mono font-bold">GET</span>
+          <code class="mono text-slate-300 text-xs">/&lt;mount&gt;/manifest.json</code>
+        </div>
+        <p class="text-slate-500 text-xs">SHA-256 file manifest per static root. Auto-regenerated with <code class="mono text-slate-400">--watch</code>.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Manifest -->
+  <section class="max-w-4xl mx-auto px-6 py-12">
+    <h2 class="text-2xl font-bold text-center mb-2 gradient-text">SHA-256 Manifests</h2>
+    <p class="text-slate-500 text-center text-sm mb-8">Content-addressable file index for each static root</p>
+
+    <div class="max-w-2xl mx-auto">
+      <div class="code-block">
+        <code>{
+  <span class="flag">"version"</span>: 1,
+  <span class="flag">"generated"</span>: <span class="value">"2026-04-09T12:00:00Z"</span>,
+  <span class="flag">"files"</span>: {
+    <span class="value">"worlds/main.world.xml"</span>: {
+      "sha256": <span class="value">"a1b2c3d4e5f6..."</span>,
+      "size": 1234
+    },
+    <span class="value">"models/hero.gltf"</span>: {
+      "sha256": <span class="value">"f6e5d4c3b2a1..."</span>,
+      "size": 56789
+    }
+  }
+}</code>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4 mt-6">
+        <div class="glass rounded-xl p-4">
+          <span class="material-symbols-outlined text-orange-400 text-xl block mb-2">tag</span>
+          <h3 class="font-semibold text-slate-100 text-xs mb-1">Content Integrity</h3>
+          <p class="text-slate-500 text-[10px]">SHA-256 hash per file enables cache invalidation and integrity checks.</p>
+        </div>
+        <div class="glass rounded-xl p-4">
+          <span class="material-symbols-outlined text-orange-400 text-xl block mb-2">sync</span>
+          <h3 class="font-semibold text-slate-100 text-xs mb-1">Auto-Regeneration</h3>
+          <p class="text-slate-500 text-[10px]">With <code class="mono">--watch</code>, manifests are invalidated on file changes (500ms debounce).</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Architecture -->
+  <section id="architecture" class="max-w-4xl mx-auto px-6 py-12">
+    <h2 class="text-2xl font-bold text-center mb-2 gradient-text">Architecture</h2>
+    <p class="text-slate-500 text-center text-sm mb-8">TypeScript/Node.js package structure</p>
+
+    <div class="glass rounded-xl p-5 max-w-2xl mx-auto mb-8">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="material-symbols-outlined text-orange-400 text-lg">folder_special</span>
+        <span class="text-slate-200 font-semibold text-sm">tools/nuna-cli/</span>
+      </div>
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        <div class="bg-black/20 rounded-lg px-3 py-2">
+          <span class="text-orange-300 text-xs font-medium mono">cli.ts</span>
+          <p class="text-slate-500 text-[10px] mt-0.5">Entry point, Commander.js CLI</p>
+        </div>
+        <div class="bg-black/20 rounded-lg px-3 py-2">
+          <span class="text-orange-300 text-xs font-medium mono">server.ts</span>
+          <p class="text-slate-500 text-[10px] mt-0.5">Fastify app + route setup</p>
+        </div>
+        <div class="bg-black/20 rounded-lg px-3 py-2">
+          <span class="text-orange-300 text-xs font-medium mono">config/</span>
+          <p class="text-slate-500 text-[10px] mt-0.5">XML parser + authoring check</p>
+        </div>
+        <div class="bg-black/20 rounded-lg px-3 py-2">
+          <span class="text-orange-300 text-xs font-medium mono">manifest/</span>
+          <p class="text-slate-500 text-[10px] mt-0.5">SHA-256 manifest builder</p>
+        </div>
+        <div class="bg-black/20 rounded-lg px-3 py-2">
+          <span class="text-orange-300 text-xs font-medium mono">discovery/</span>
+          <p class="text-slate-500 text-[10px] mt-0.5">discover.json + connectivity</p>
+        </div>
+        <div class="bg-black/20 rounded-lg px-3 py-2">
+          <span class="text-orange-300 text-xs font-medium mono">watch/</span>
+          <p class="text-slate-500 text-[10px] mt-0.5">chokidar file watcher</p>
+        </div>
+        <div class="bg-black/20 rounded-lg px-3 py-2">
+          <span class="text-orange-300 text-xs font-medium mono">open/</span>
+          <p class="text-slate-500 text-[10px] mt-0.5">OS URL handler launcher</p>
+        </div>
+        <div class="bg-black/20 rounded-lg px-3 py-2">
+          <span class="text-blue-300 text-xs font-medium mono">schema/</span>
+          <p class="text-slate-500 text-[10px] mt-0.5">XSD + example XML</p>
+        </div>
+        <div class="bg-black/20 rounded-lg px-3 py-2">
+          <span class="text-blue-300 text-xs font-medium mono">test/</span>
+          <p class="text-slate-500 text-[10px] mt-0.5">Vitest unit tests</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tech stack -->
+    <h3 class="text-lg font-semibold text-center mb-4 text-slate-200">Tech Stack</h3>
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 max-w-3xl mx-auto">
+      <div class="glass rounded-lg p-3 text-center hover-glow">
+        <span class="text-slate-200 text-sm font-medium block">Fastify</span>
+        <p class="text-slate-500 text-[10px]">HTTP server</p>
+      </div>
+      <div class="glass rounded-lg p-3 text-center hover-glow">
+        <span class="text-slate-200 text-sm font-medium block">Commander.js</span>
+        <p class="text-slate-500 text-[10px]">CLI parsing</p>
+      </div>
+      <div class="glass rounded-lg p-3 text-center hover-glow">
+        <span class="text-slate-200 text-sm font-medium block">fast-xml-parser</span>
+        <p class="text-slate-500 text-[10px]">XML config</p>
+      </div>
+      <div class="glass rounded-lg p-3 text-center hover-glow">
+        <span class="text-slate-200 text-sm font-medium block">chokidar</span>
+        <p class="text-slate-500 text-[10px]">File watching</p>
+      </div>
+      <div class="glass rounded-lg p-3 text-center hover-glow">
+        <span class="text-slate-200 text-sm font-medium block">node:crypto</span>
+        <p class="text-slate-500 text-[10px]">SHA-256</p>
+      </div>
+      <div class="glass rounded-lg p-3 text-center hover-glow">
+        <span class="text-slate-200 text-sm font-medium block">open</span>
+        <p class="text-slate-500 text-[10px]">OS URL handler</p>
+      </div>
+      <div class="glass rounded-lg p-3 text-center hover-glow">
+        <span class="text-slate-200 text-sm font-medium block">Vitest</span>
+        <p class="text-slate-500 text-[10px]">Unit tests</p>
+      </div>
+      <div class="glass rounded-lg p-3 text-center hover-glow">
+        <span class="text-slate-200 text-sm font-medium block">TypeScript</span>
+        <p class="text-slate-500 text-[10px]">Language</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- What nuna-serve is NOT -->
+  <section class="max-w-4xl mx-auto px-6 py-12">
+    <h2 class="text-2xl font-bold text-center mb-2 gradient-text">Scope</h2>
+    <p class="text-slate-500 text-center text-sm mb-8">What nuna-serve does and does not do</p>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl mx-auto">
+      <div class="glass rounded-xl p-5">
+        <h3 class="font-semibold text-slate-100 text-sm mb-3 flex items-center gap-2">
+          <span class="material-symbols-outlined text-green-400 text-lg">check_circle</span>
+          What it does
+        </h3>
+        <ul class="text-slate-400 text-xs space-y-2">
+          <li class="flex items-start gap-2"><span class="text-green-400 mt-0.5">&#9632;</span> Serve static game content over HTTP</li>
+          <li class="flex items-start gap-2"><span class="text-green-400 mt-0.5">&#9632;</span> Generate SHA-256 file manifests</li>
+          <li class="flex items-start gap-2"><span class="text-green-400 mt-0.5">&#9632;</span> Publish discovery endpoint for the renderer</li>
+          <li class="flex items-start gap-2"><span class="text-green-400 mt-0.5">&#9632;</span> Advertise connected domain servers</li>
+          <li class="flex items-start gap-2"><span class="text-green-400 mt-0.5">&#9632;</span> Watch files and regenerate manifests</li>
+          <li class="flex items-start gap-2"><span class="text-green-400 mt-0.5">&#9632;</span> Warn about authoring files in served paths</li>
+        </ul>
+      </div>
+      <div class="glass rounded-xl p-5">
+        <h3 class="font-semibold text-slate-100 text-sm mb-3 flex items-center gap-2">
+          <span class="material-symbols-outlined text-red-400 text-lg">cancel</span>
+          What it does not do
+        </h3>
+        <ul class="text-slate-400 text-xs space-y-2">
+          <li class="flex items-start gap-2"><span class="text-red-400 mt-0.5">&#9632;</span> Proxy domain server traffic</li>
+          <li class="flex items-start gap-2"><span class="text-red-400 mt-0.5">&#9632;</span> Production deployment (HTTPS, auth, CDN)</li>
+          <li class="flex items-start gap-2"><span class="text-red-400 mt-0.5">&#9632;</span> Asset build/optimization/FTP upload</li>
+          <li class="flex items-start gap-2"><span class="text-red-400 mt-0.5">&#9632;</span> Blender/Photoshop export triggers</li>
+          <li class="flex items-start gap-2"><span class="text-red-400 mt-0.5">&#9632;</span> Hot-reload in the renderer itself</li>
+          <li class="flex items-start gap-2"><span class="text-red-400 mt-0.5">&#9632;</span> Binary packaging</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="glass border-t border-slate-700/50 py-8 px-6 text-center text-xs diagonal-stripes">
+    <nav class="flex items-center justify-center gap-4">
+      <span class="text-slate-500">&copy; 2025 Patrice Chevillat</span>
+      <a href="https://chevp.github.io/site-policy/terms.html" target="_blank" rel="noopener" class="text-slate-500 hover:text-slate-300 transition-colors">Terms</a>
+      <a href="https://chevp.github.io/site-policy/privacy.html" target="_blank" rel="noopener" class="text-slate-500 hover:text-slate-300 transition-colors">Privacy</a>
+      <a href="https://chevp.github.io/site-policy/impressum.html" target="_blank" rel="noopener" class="text-slate-500 hover:text-slate-300 transition-colors">Impressum</a>
+      <a href="https://chevp.github.io/site-policy/contact.html" target="_blank" rel="noopener" class="text-slate-500 hover:text-slate-300 transition-colors">Contact</a>
+    </nav>
+  </footer>
+
+</body>
+</html>

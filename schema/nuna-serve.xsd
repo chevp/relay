@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:ns="https://nuna.dev/schemas/serve/v1"
+           targetNamespace="https://nuna.dev/schemas/serve/v1"
+           elementFormDefault="qualified">
+
+  <!-- Root element -->
+  <xs:element name="nuna-serve" type="ns:NunaServeType"/>
+
+  <xs:complexType name="NunaServeType">
+    <xs:all>
+      <xs:element name="static" type="ns:StaticType" minOccurs="0"/>
+      <xs:element name="servers" type="ns:ServersType" minOccurs="0"/>
+      <xs:element name="sources" type="ns:SourcesType" minOccurs="0"/>
+    </xs:all>
+    <xs:attribute name="host" type="xs:string" default="0.0.0.0"/>
+    <xs:attribute name="port" type="ns:PortType" default="3001"/>
+  </xs:complexType>
+
+  <!-- Static roots -->
+  <xs:complexType name="StaticType">
+    <xs:sequence>
+      <xs:element name="root" type="ns:StaticRootType" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="StaticRootType">
+    <xs:attribute name="alias" type="xs:string" use="required"/>
+    <xs:attribute name="path" type="xs:string" use="required"/>
+    <xs:attribute name="mount" type="xs:string" use="required"/>
+    <xs:attribute name="optional" type="xs:boolean" default="false"/>
+  </xs:complexType>
+
+  <!-- Connected servers -->
+  <xs:complexType name="ServersType">
+    <xs:sequence>
+      <xs:element name="server" type="ns:ServerType" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="ServerType">
+    <xs:attribute name="alias" type="xs:string" use="required"/>
+    <xs:attribute name="url" type="xs:anyURI" use="required"/>
+    <xs:attribute name="kind" type="xs:string" use="required"/>
+    <xs:attribute name="required" type="xs:boolean" default="false"/>
+  </xs:complexType>
+
+  <!-- Source mappings -->
+  <xs:complexType name="SourcesType">
+    <xs:sequence>
+      <xs:element name="source" type="ns:SourceType" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="SourceType">
+    <xs:attribute name="alias" type="xs:string" use="required"/>
+    <xs:attribute name="ref" type="ns:SourceRefType" use="required"/>
+  </xs:complexType>
+
+  <!-- Custom types -->
+  <xs:simpleType name="PortType">
+    <xs:restriction base="xs:integer">
+      <xs:minInclusive value="1"/>
+      <xs:maxInclusive value="65535"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="SourceRefType">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="(static|server):.+"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+</xs:schema>
