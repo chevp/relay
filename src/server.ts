@@ -3,11 +3,12 @@
  * and /health.
  */
 
-import Fastify, { FastifyInstance } from 'fastify';
+import Fastify, { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import fastifyStatic from '@fastify/static';
 import fastifyCors from '@fastify/cors';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import pc from 'picocolors';
 import type { ServeConfig, StaticRoot } from './config/ServeConfig.js';
 import { buildManifest, type Manifest } from './manifest/ManifestBuilder.js';
 import { buildDiscovery } from './discovery/discover.js';
@@ -30,6 +31,11 @@ export async function createServer(ctx: ServerContext): Promise<FastifyInstance>
   });
 
   await app.register(fastifyCors, { origin: '*' });
+
+  // Per-request access log, json-server style: METHOD /path STATUS Xms
+  app.addHook('onResponse', async (req, reply) => {
+    logRequest(req, reply);
+  });
 
   // Register each static root as its own prefix.
   for (const root of ctx.config.staticRoots) {
@@ -97,4 +103,32 @@ async function pathExists(p: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+function logRequest(req: FastifyRequest, reply: FastifyReply): void {
+  const method = colorMethod(req.method);
+  const status = colorStatus(reply.statusCode);
+  const ms = reply.elapsedTime.toFixed(1);
+  console.log(`${method} ${req.url} ${status} ${pc.dim(`${ms} ms`)}`);
+}
+
+function colorMethod(m: string): string {
+  const pad = m.padEnd(6);
+  switch (m) {
+    case 'GET':    return pc.cyan(pad);
+    case 'POST':   return pc.green(pad);
+    case 'PUT':    return pc.yellow(pad);
+    case 'PATCH':  return pc.yellow(pad);
+    case 'DELETE': return pc.red(pad);
+    default:       return pc.white(pad);
+  }
+}
+
+function colorStatus(code: number): string {
+  const s = String(code);
+  if (code >= 500) return pc.red(s);
+  if (code >= 400) return pc.yellow(s);
+  if (code >= 300) return pc.cyan(s);
+  if (code >= 200) return pc.green(s);
+  return pc.white(s);
 }

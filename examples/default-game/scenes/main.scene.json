@@ -1,0 +1,20 @@
+{
+  "version": "1.0",
+  "scene": {
+    "id": "main",
+    "metadata": {
+      "name": "Default Game",
+      "description": "Empty starter scene served by @nuna/relay. Add entities + assets to make it renderable.",
+      "author": "nuna"
+    },
+    "camera": {
+      "type": "perspective",
+      "fov": 45.0,
+      "znear": 0.01,
+      "zfar": 100.0,
+      "position": [0.0, 0.0, 3.0],
+      "rotation": [0.0, 0.0, 0.0]
+    },
+    "entities": []
+  }
+}

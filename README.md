@@ -35,6 +35,20 @@ relay --help
 Node ≥ 20 required. The published tarball contains only `dist/`,
 `schema/`, and this README — no binaries.
 
+### Try it on the bundled example
+
+A minimal layout-only game lives in [examples/default-game/](examples/default-game/):
+
+```bash
+cd examples/default-game
+relay serve --verbose
+# in another shell:
+curl http://localhost:3001/discover.json
+```
+
+See [examples/default-game/README.md](examples/default-game/README.md) for
+the full layout and endpoint list.
+
 ---
 
 ## Player (separate package & repo)

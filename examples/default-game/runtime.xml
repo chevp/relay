@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<synth version="1.0" author="nuna" xmlns="https://chevp.github.io/synth-protocol/schema/synth/1.0">
+<runtimeRenderer version="1.0">
+
+  <metadata>
+    <name>Default Game</name>
+    <client>relay-example</client>
+  </metadata>
+
+  <renderer>
+    <api type="vulkan" version="1.0"/>
+    <window width="1280" height="720" fullscreen="false" vsync="true" resizable="true"/>
+    <validation enabled="false"/>
+  </renderer>
+
+  <paths>
+    <asset-root uri="file://./"/>
+  </paths>
+
+  <camera>
+    <default-position x="0" y="0" z="3"/>
+    <default-rotation x="0" y="0" z="0"/>
+    <default-fov>45.0</default-fov>
+    <znear>0.01</znear>
+    <zfar>100.0</zfar>
+  </camera>
+
+  <debug>
+    <log-level>INFO</log-level>
+    <log-to-console>true</log-to-console>
+  </debug>
+
+  <scene uri="file://scenes/main.scene.json"/>
+
+</runtimeRenderer>
+</synth>
