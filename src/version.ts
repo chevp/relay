@@ -3,4 +3,4 @@
  * subcommand that needs to print/embed it. Lives in its own module to avoid
  * circular imports between cli.ts and commands/.
  */
-export const VERSION = '0.2.0';
+export const VERSION = '0.3.0';
