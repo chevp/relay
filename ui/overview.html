@@ -1,0 +1,501 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>relay — explorer</title>
+<style>
+  :root {
+    --bg: #1a1a1a;
+    --panel: #161616;
+    --deep: #0e1116;
+    --chrome: #141821;
+    --border: #2a2a2a;
+    --border-soft: #1f1f1f;
+    --text: #ddd;
+    --dim: #889;
+    --mute: #556;
+    --teal: #4ecdc4;
+    --yellow: #ffe66d;
+    --red: #ff6b6b;
+    --purple: #a78bfa;
+    --green: #6ee07a;
+    --magenta: #e879c5;
+
+    --kw: #c586c0;
+  }
+
+  * { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: #2a2f3a transparent; }
+  *::-webkit-scrollbar { width: 8px; height: 8px; }
+  *::-webkit-scrollbar-thumb { background: #2a2f3a; border-radius: 4px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+
+  html, body {
+    margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+  }
+
+  #app { display: flex; flex-direction: column; height: 100vh; min-height: 0; }
+
+  /* Centred reading column. Header/toolbar/body share one max width so the
+     tree, search box, and title all align on the same vertical edges. */
+  .container { width: 100%; max-width: 920px; margin: 0 auto; padding: 0 20px; }
+
+  header {
+    border-bottom: 1px solid var(--border);
+    background: var(--chrome);
+  }
+  header .container {
+    display: flex; align-items: center; justify-content: space-between;
+    padding-top: 10px; padding-bottom: 10px;
+  }
+  header .title {
+    color: var(--text); font-size: 12px; letter-spacing: 0.04em;
+  }
+  header .title b { color: var(--magenta); font-weight: 500; }
+  header .title b::before { content: "● "; }
+  header .meta { color: var(--mute); font-size: 11px; }
+  header .meta .sep { margin: 0 8px; color: var(--border); }
+  header .meta .ok { color: var(--green); }
+  header .meta .err { color: var(--red); }
+
+  #toolbar {
+    background: var(--panel);
+    border-bottom: 1px solid var(--border-soft);
+  }
+  #toolbar .container {
+    display: flex; align-items: center; gap: 10px;
+    padding-top: 8px; padding-bottom: 8px;
+  }
+  #search {
+    flex: 1; max-width: 480px;
+    background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 4px;
+    padding: 6px 10px; font: inherit; font-size: 12px; outline: none;
+  }
+  #search:focus { border-color: var(--magenta); }
+  #search::placeholder { color: var(--mute); }
+  .tool-btn {
+    background: transparent; color: var(--dim); border: 1px solid var(--border);
+    padding: 5px 10px; font: inherit; font-size: 11px;
+    cursor: pointer; border-radius: 3px;
+  }
+  .tool-btn:hover { color: var(--magenta); border-color: var(--magenta); }
+  .tool-btn.active { color: var(--magenta); border-color: var(--magenta); }
+  .stat { color: var(--mute); font-size: 11px; margin-left: auto; }
+
+  #body {
+    flex: 1; min-height: 0; overflow: auto;
+    line-height: 1.5;
+  }
+  #body .container { padding-top: 12px; padding-bottom: 24px; }
+
+  .root-block { margin-bottom: 20px; }
+  .root-head {
+    display: flex; align-items: baseline; gap: 8px;
+    padding: 6px 4px; border-bottom: 1px solid var(--border-soft);
+    margin-bottom: 6px;
+  }
+  .root-head .alias { color: var(--magenta); font-weight: 500; }
+  .root-head .mount { color: var(--mute); font-size: 11px; }
+  .root-head .count { color: var(--mute); font-size: 11px; margin-left: auto; }
+  .root-head .err { color: var(--red); font-size: 11px; }
+
+  .row {
+    display: flex; align-items: baseline; gap: 6px;
+    padding: 2px 4px; border-radius: 3px;
+    user-select: none;
+  }
+  .row:hover { background: #1c2230; }
+  .row.dir { cursor: pointer; }
+  .row.file { cursor: pointer; }
+
+  .chev {
+    display: inline-block; width: 10px; color: var(--mute);
+    transition: transform 120ms ease; flex: 0 0 auto;
+  }
+  .chev.collapsed { transform: rotate(-90deg); }
+  .bullet { color: var(--mute); width: 10px; flex: 0 0 auto; text-align: center; }
+
+  .name { font-weight: 500; }
+  .name.dir    { color: var(--text); }
+  .name.scene  { color: var(--magenta); }
+  .name.script { color: var(--kw); }
+  .name.shader { color: var(--yellow); }
+  .name.mesh   { color: var(--teal); }
+  .name.file   { color: var(--text); }
+
+  .ext {
+    color: var(--mute); font-size: 10px;
+    background: #1f1f1f; padding: 0 5px; border-radius: 2px;
+    margin-left: 4px; letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .meta { color: var(--mute); font-size: 11px; margin-left: auto; }
+  .sha { color: var(--mute); font-family: inherit; font-size: 10px; }
+
+  .children { margin-left: 14px; border-left: 1px dashed #232733; padding-left: 8px; }
+  .children.hidden { display: none; }
+
+  .empty { color: var(--mute); font-style: italic; padding: 10px 4px; }
+  .loading { color: var(--mute); font-style: italic; padding: 10px 4px; }
+  .error { color: var(--red); padding: 10px 4px; font-size: 11.5px; }
+
+  .row.hidden { display: none; }
+  mark { background: #4a2842; color: var(--magenta); padding: 0 2px; border-radius: 2px; }
+</style>
+
+<div id="app">
+  <header>
+    <div class="container">
+      <span class="title"><b>relay</b> explorer</span>
+      <span class="meta" id="status">connecting…</span>
+    </div>
+  </header>
+
+  <div id="toolbar">
+    <div class="container">
+      <input id="search" type="search" placeholder="filter by name… (regex ok)" autocomplete="off" />
+      <button class="tool-btn" id="expand-all" type="button">expand all</button>
+      <button class="tool-btn" id="collapse-all" type="button">collapse all</button>
+      <button class="tool-btn" id="refresh" type="button">refresh</button>
+      <span class="stat" id="stat"></span>
+    </div>
+  </div>
+
+  <div id="body">
+    <div class="container" id="body-inner">
+      <div class="loading">loading discovery…</div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------------------------------------------------------------------------
+// File type classification — drives the colour / badge in the tree.
+// ---------------------------------------------------------------------------
+
+function classify(name) {
+  const n = name.toLowerCase();
+  if (n.endsWith(".world.xml") || n.endsWith(".scene.xml")) return "scene";
+  if (n.endsWith(".lua")) return "script";
+  if (n.endsWith(".frag") || n.endsWith(".vert") || n.endsWith(".glsl")) return "shader";
+  if (n.endsWith(".gltf") || n.endsWith(".glb")) return "mesh";
+  return "file";
+}
+function extLabel(name) {
+  const i = name.lastIndexOf(".");
+  if (i < 0 || i === name.length - 1) return "";
+  // Multi-segment exts like .world.xml — keep last segment for the chip
+  return name.slice(i + 1);
+}
+function humanSize(bytes) {
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+  return (bytes / (1024 * 1024 * 1024)).toFixed(2) + " GB";
+}
+
+// ---------------------------------------------------------------------------
+// Tree construction from a flat manifest.files map.
+// Each manifest entry is { sha256, size } keyed by POSIX relative path.
+// ---------------------------------------------------------------------------
+
+function buildTree(files) {
+  const root = { name: "", type: "dir", children: new Map(), fileCount: 0, totalSize: 0 };
+  for (const [relPath, entry] of Object.entries(files)) {
+    const parts = relPath.split("/");
+    let node = root;
+    for (let i = 0; i < parts.length - 1; i++) {
+      const seg = parts[i];
+      if (!node.children.has(seg)) {
+        node.children.set(seg, { name: seg, type: "dir", children: new Map(), fileCount: 0, totalSize: 0 });
+      }
+      node = node.children.get(seg);
+    }
+    const leaf = parts[parts.length - 1];
+    node.children.set(leaf, {
+      name: leaf, type: "file", path: relPath,
+      sha256: entry.sha256, size: entry.size,
+    });
+  }
+  // Roll up fileCount / totalSize so directory rows can show summaries.
+  function roll(n) {
+    if (n.type === "file") { return { files: 1, size: n.size }; }
+    let files = 0, size = 0;
+    for (const c of n.children.values()) {
+      const r = roll(c);
+      files += r.files; size += r.size;
+    }
+    n.fileCount = files; n.totalSize = size;
+    return { files, size };
+  }
+  roll(root);
+  return root;
+}
+
+// Deterministic ordering — directories first, then files, alphabetic within each.
+function sortChildren(node) {
+  const arr = Array.from(node.children.values());
+  arr.sort((a, b) => {
+    if (a.type !== b.type) return a.type === "dir" ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+  return arr;
+}
+
+// ---------------------------------------------------------------------------
+// Rendering — every root gets its own block; collapsed-set is shared across
+// re-renders so filtering doesn't snap directories back open.
+// ---------------------------------------------------------------------------
+
+const bodyEl   = document.getElementById("body-inner");
+const statusEl = document.getElementById("status");
+const statEl   = document.getElementById("stat");
+const searchEl = document.getElementById("search");
+
+const collapsed = new Set();   // keys: "<alias>::<path>" (path may be "" for root)
+let roots = [];                // [{ alias, mount, url, tree, error }]
+let filterRegex = null;
+
+function key(alias, path) { return alias + "::" + path; }
+
+function highlight(name) {
+  if (!filterRegex) return escapeHtml(name);
+  const escaped = escapeHtml(name);
+  try {
+    return escaped.replace(filterRegex, (m) => `<mark>${m}</mark>`);
+  } catch {
+    return escaped;
+  }
+}
+function escapeHtml(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+// Decides whether a subtree should remain visible under the current filter.
+// A file matches if its full path matches; a directory is visible if any descendant matches.
+function matchesFilter(node, pathAcc) {
+  if (!filterRegex) return true;
+  if (node.type === "file") {
+    return filterRegex.test(node.path) || filterRegex.test(node.name);
+  }
+  for (const c of node.children.values()) {
+    const childPath = pathAcc ? pathAcc + "/" + c.name : c.name;
+    if (matchesFilter(c, childPath)) return true;
+  }
+  return false;
+}
+
+function renderAll() {
+  let html = "";
+  let totalFiles = 0;
+  let totalSize = 0;
+
+  for (const r of roots) {
+    html += renderRoot(r);
+    if (r.tree) {
+      totalFiles += r.tree.fileCount;
+      totalSize += r.tree.totalSize;
+    }
+  }
+
+  bodyEl.innerHTML = html || '<div class="empty">no static roots</div>';
+  statEl.textContent = `${roots.length} root${roots.length === 1 ? "" : "s"} · ${totalFiles} files · ${humanSize(totalSize)}`;
+
+  attachHandlers();
+}
+
+function renderRoot(r) {
+  let html = `<div class="root-block">`;
+  html += `<div class="root-head">`;
+  html += `<span class="alias">${escapeHtml(r.alias)}</span>`;
+  html += `<span class="mount">${escapeHtml(r.mount)}</span>`;
+  if (r.error) {
+    html += `<span class="err">${escapeHtml(r.error)}</span>`;
+  } else if (r.tree) {
+    html += `<span class="count">${r.tree.fileCount} files · ${humanSize(r.tree.totalSize)}</span>`;
+  }
+  html += `</div>`;
+
+  if (r.error) {
+    html += `<div class="error">${escapeHtml(r.error)}</div>`;
+  } else if (!r.tree) {
+    html += `<div class="loading">loading manifest…</div>`;
+  } else {
+    html += renderChildren(r.tree, "", r.alias, r.mount);
+  }
+  html += `</div>`;
+  return html;
+}
+
+function renderChildren(parent, pathAcc, alias, mount) {
+  const items = sortChildren(parent);
+  if (items.length === 0) return `<div class="empty">empty</div>`;
+
+  let html = "";
+  for (const c of items) {
+    const childPath = pathAcc ? pathAcc + "/" + c.name : c.name;
+    if (!matchesFilter(c, childPath)) continue;
+    html += renderNode(c, childPath, alias, mount);
+  }
+  return html;
+}
+
+function renderNode(node, pathAcc, alias, mount) {
+  if (node.type === "dir") {
+    const isCollapsed = collapsed.has(key(alias, pathAcc));
+    // When the user is filtering, force-open everything so matches are visible.
+    const forceOpen = !!filterRegex;
+    const open = forceOpen || !isCollapsed;
+
+    let html = `<div class="row dir" data-alias="${escapeHtml(alias)}" data-path="${escapeHtml(pathAcc)}" data-kind="dir">`;
+    html += `<span class="chev ${open ? "" : "collapsed"}">▾</span>`;
+    html += `<span class="name dir">${highlight(node.name)}/</span>`;
+    html += `<span class="meta">${node.fileCount} · ${humanSize(node.totalSize)}</span>`;
+    html += `</div>`;
+    html += `<div class="children ${open ? "" : "hidden"}">`;
+    html += renderChildren(node, pathAcc, alias, mount);
+    html += `</div>`;
+    return html;
+  }
+
+  // File row
+  const kind = classify(node.name);
+  const ext = extLabel(node.name);
+  const fullUrl = joinUrl(mount, node.path);
+  let html = `<div class="row file" data-url="${escapeHtml(fullUrl)}" data-kind="file">`;
+  html += `<span class="bullet">·</span>`;
+  html += `<span class="name ${kind}">${highlight(node.name)}</span>`;
+  if (ext) html += `<span class="ext">${escapeHtml(ext)}</span>`;
+  html += `<span class="meta">${humanSize(node.size)} <span class="sha">${(node.sha256 || "").slice(0, 8)}</span></span>`;
+  html += `</div>`;
+  return html;
+}
+
+function joinUrl(mount, relPath) {
+  // mount ends with "/"; relPath has no leading slash. Don't encode the slashes.
+  return mount + relPath.split("/").map(encodeURIComponent).join("/");
+}
+
+function attachHandlers() {
+  for (const row of bodyEl.querySelectorAll('.row.dir')) {
+    row.addEventListener("click", () => {
+      // Suppress collapse while filtering — the tree is force-open and toggling
+      // would just confuse the user; clearing the filter restores user state.
+      if (filterRegex) return;
+      const k = key(row.dataset.alias, row.dataset.path);
+      if (collapsed.has(k)) collapsed.delete(k); else collapsed.add(k);
+      renderAll();
+    });
+  }
+  for (const row of bodyEl.querySelectorAll('.row.file')) {
+    row.addEventListener("click", () => {
+      const url = row.dataset.url;
+      if (url) window.open(url, "_blank", "noopener");
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Loading — discover → per-root manifests, all in parallel.
+// ---------------------------------------------------------------------------
+
+async function load() {
+  bodyEl.innerHTML = '<div class="loading">loading discovery…</div>';
+  statusEl.innerHTML = 'connecting…';
+  statEl.textContent = "";
+  roots = [];
+
+  let discovery;
+  try {
+    const res = await fetch("/discover.json", { cache: "no-cache" });
+    if (!res.ok) throw new Error(`/discover.json → HTTP ${res.status}`);
+    discovery = await res.json();
+  } catch (err) {
+    bodyEl.innerHTML = `<div class="error">discovery failed: ${escapeHtml(String(err.message || err))}</div>`;
+    statusEl.innerHTML = '<span class="err">discovery failed</span>';
+    return;
+  }
+
+  const version = discovery.nunaServe?.version ?? "?";
+  statusEl.innerHTML = `<span class="ok">●</span> v${escapeHtml(String(version))}`;
+
+  const staticMap = discovery.static || {};
+  // Render skeleton with all roots first, then fill them in as manifests arrive.
+  roots = Object.values(staticMap).map((entry) => ({
+    alias: entry.alias,
+    mount: deriveMount(entry.url),
+    url: entry.url,
+    tree: null,
+    error: null,
+  }));
+  renderAll();
+
+  await Promise.all(roots.map(async (r) => {
+    try {
+      const res = await fetch(joinUrl(r.mount, "manifest.json"), { cache: "no-cache" });
+      if (!res.ok) throw new Error(`manifest.json → HTTP ${res.status}`);
+      const manifest = await res.json();
+      r.tree = buildTree(manifest.files || {});
+    } catch (err) {
+      r.error = String(err.message || err);
+    }
+    renderAll();
+  }));
+}
+
+function deriveMount(absUrl) {
+  // discovery gives absolute URLs; the page is same-origin, so use the path part.
+  try {
+    const u = new URL(absUrl);
+    return u.pathname.endsWith("/") ? u.pathname : u.pathname + "/";
+  } catch {
+    // Already a path
+    return absUrl.endsWith("/") ? absUrl : absUrl + "/";
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Search / expand-collapse-all / refresh wiring.
+// ---------------------------------------------------------------------------
+
+let searchTimer = null;
+searchEl.addEventListener("input", () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    const q = searchEl.value.trim();
+    if (!q) { filterRegex = null; }
+    else {
+      try { filterRegex = new RegExp(q, "i"); }
+      catch { filterRegex = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"); }
+    }
+    renderAll();
+  }, 80);
+});
+
+document.getElementById("expand-all").addEventListener("click", () => {
+  collapsed.clear();
+  renderAll();
+});
+document.getElementById("collapse-all").addEventListener("click", () => {
+  // Collapse every directory in every root.
+  for (const r of roots) {
+    if (!r.tree) continue;
+    walkDirs(r.tree, "", (path) => collapsed.add(key(r.alias, path)));
+  }
+  renderAll();
+});
+document.getElementById("refresh").addEventListener("click", () => {
+  load();
+});
+
+function walkDirs(node, pathAcc, cb) {
+  if (node.type !== "dir") return;
+  if (pathAcc !== "" || node.name !== "") cb(pathAcc);
+  for (const c of node.children.values()) {
+    const childPath = pathAcc ? pathAcc + "/" + c.name : c.name;
+    if (c.type === "dir") walkDirs(c, childPath, cb);
+  }
+}
+
+load();
+</script>

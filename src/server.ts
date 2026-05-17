@@ -6,12 +6,28 @@
 import Fastify, { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import fastifyStatic from '@fastify/static';
 import fastifyCors from '@fastify/cors';
-import { promises as fs } from 'node:fs';
+import { promises as fs, existsSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import pc from 'picocolors';
 import type { ServeConfig, StaticRoot } from './config/ServeConfig.js';
 import { buildManifest, type Manifest } from './manifest/ManifestBuilder.js';
 import { buildDiscovery } from './discovery/discover.js';
+
+// ui/overview.html sits next to dist/ when published, and next to src/ during
+// dev (tsx). Resolve once at import time so the route handler is cheap.
+const OVERVIEW_PATH = resolveOverviewPath();
+function resolveOverviewPath(): string {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    path.resolve(here, '..', 'ui', 'overview.html'),       // dist/server.js → ../ui
+    path.resolve(here, '..', '..', 'ui', 'overview.html'), // src/server.ts → ../../ui
+  ];
+  for (const c of candidates) {
+    if (existsSync(c)) return c;
+  }
+  return candidates[0];
+}
 
 export interface ServerContext {
   config: ServeConfig;
@@ -41,6 +57,19 @@ export async function createServer(ctx: ServerContext): Promise<FastifyInstance>
   for (const root of ctx.config.staticRoots) {
     await registerStaticRoot(app, root, ctx);
   }
+
+  // Root → overview SPA (vanilla HTML, hits /discover.json + per-root
+  // manifest.json to render an explorer). Single-file, no build step.
+  app.get('/', async (_req, reply) => {
+    try {
+      const html = await fs.readFile(OVERVIEW_PATH, 'utf8');
+      reply.header('Content-Type', 'text/html; charset=utf-8');
+      reply.header('Cache-Control', 'no-cache');
+      return html;
+    } catch {
+      return reply.code(500).send({ error: 'overview_unavailable', path: OVERVIEW_PATH });
+    }
+  });
 
   app.get('/health', async () => ({ status: 'ok', version: ctx.version }));
 
