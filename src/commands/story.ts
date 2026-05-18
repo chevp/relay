@@ -18,9 +18,9 @@ import pc from 'picocolors';
 import { promises as fs } from 'node:fs';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { spawn, type ChildProcess } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
-import WebSocket from 'ws';
+import { connect, sendCmd } from '../daemon/ipc.js';
+import { spawnPlayerDaemon, shutdownPlayerDaemon, type PlayerHandle } from '../daemon/lifecycle.js';
 
 interface StoryOptions {
   game: string;
@@ -111,46 +111,23 @@ async function runStory(opts: StoryOptions): Promise<void> {
   await fs.mkdir(path.join(outDir, 'images', 'scenes'), { recursive: true });
 
   const results: SceneInfo[] = [];
-  let daemon: ChildProcess | null = null;
+  let daemon: PlayerHandle | null = null;
   let captureCount = 0;
   let cycle = 0;
 
   async function ensureDaemon(): Promise<void> {
-    if (daemon && !daemon.killed) return;
+    if (daemon && !daemon.process.killed) return;
     cycle += 1;
     console.log(pc.gray(`[story] daemon cycle #${cycle} starting...`));
-    daemon = spawn(playerPath, ['--daemon', '--port', String(port)], {
-      cwd: daemonCwd,
-      stdio: 'ignore',
-      detached: false,
-      windowsHide: true,
-    });
-    daemon.on('exit', (code) => {
+    daemon = await spawnPlayerDaemon({ playerPath, port, cwd: daemonCwd });
+    daemon.process.on('exit', (code) => {
       console.log(pc.gray(`[story] daemon exit (code=${code})`));
     });
-    await waitForEngineRunning(port, 30_000);
   }
 
   async function killDaemon(): Promise<void> {
-    if (!daemon || daemon.killed) return;
-    try {
-      const ws = await connect(`ws://127.0.0.1:${port}`, 2_000);
-      try {
-        await sendCmd(ws, 'shutdown', {}, 5_000);
-      } finally {
-        ws.close();
-      }
-      // Wait briefly for graceful exit
-      await Promise.race([
-        new Promise<void>((res) => daemon!.once('exit', () => res())),
-        delay(5_000),
-      ]);
-    } catch {
-      // Fall through to force-kill
-    }
-    if (!daemon.killed) {
-      daemon.kill();
-    }
+    if (!daemon) return;
+    await shutdownPlayerDaemon(daemon);
     daemon = null;
   }
 
@@ -271,65 +248,6 @@ async function scanScenes(gameRoot: string): Promise<SceneInfo[]> {
   }
   out.sort((a, b) => a.id.localeCompare(b.id));
   return out;
-}
-
-interface IpcResponse { id: string; ok: boolean; result?: any; error?: string; }
-
-async function connect(uri: string, timeoutMs: number): Promise<WebSocket> {
-  const ws = new WebSocket(uri);
-  await new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      ws.terminate();
-      reject(new Error(`ws connect timeout: ${uri}`));
-    }, timeoutMs);
-    ws.once('open', () => { clearTimeout(timer); resolve(); });
-    ws.once('error', (err) => { clearTimeout(timer); reject(err); });
-  });
-  return ws;
-}
-
-async function sendCmd(ws: WebSocket, cmd: string, args: Record<string, unknown>, timeoutMs: number): Promise<IpcResponse> {
-  const id = `${cmd}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-  const message: Record<string, unknown> = { id, cmd };
-  if (Object.keys(args).length > 0) message.args = args;
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`ws cmd timeout (${cmd}, ${timeoutMs}ms)`)), timeoutMs);
-    const onMessage = (data: WebSocket.RawData): void => {
-      try {
-        const msg = JSON.parse(data.toString()) as IpcResponse;
-        if (msg.id !== id) return;
-        clearTimeout(timer);
-        ws.off('message', onMessage);
-        resolve(msg);
-      } catch (err) {
-        clearTimeout(timer);
-        ws.off('message', onMessage);
-        reject(err);
-      }
-    };
-    ws.on('message', onMessage);
-    ws.send(JSON.stringify(message));
-  });
-}
-
-async function waitForEngineRunning(port: number, timeoutMs: number): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  let lastErr: Error | null = null;
-  while (Date.now() < deadline) {
-    try {
-      const ws = await connect(`ws://127.0.0.1:${port}`, 1_500);
-      try {
-        const r = await sendCmd(ws, 'ping', {}, 3_000);
-        if (r.ok && r.result?.engineRunning) return;
-      } finally {
-        ws.close();
-      }
-    } catch (err) {
-      lastErr = err as Error;
-    }
-    await delay(500);
-  }
-  throw new Error(`daemon never reached engineRunning state${lastErr ? ` (last: ${lastErr.message})` : ''}`);
 }
 
 async function waitForFile(absPath: string, timeoutMs: number): Promise<boolean> {
