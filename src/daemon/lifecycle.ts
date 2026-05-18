@@ -14,6 +14,8 @@ export interface SpawnPlayerOptions {
   playerPath: string;
   port: number;
   cwd: string;
+  /** Extra args appended after `--daemon --port <n>` (e.g. an input runtime.xml). */
+  extraArgs?: string[];
   /** Time to wait for the daemon to reach engineRunning before failing. */
   engineReadyTimeoutMs?: number;
 }
@@ -30,7 +32,8 @@ export async function spawnPlayerDaemon(opts: SpawnPlayerOptions): Promise<Playe
     detached: false,
     windowsHide: true,
   };
-  const proc = spawn(opts.playerPath, ['--daemon', '--port', String(opts.port)], spawnOpts);
+  const args = ['--daemon', '--port', String(opts.port), ...(opts.extraArgs ?? [])];
+  const proc = spawn(opts.playerPath, args, spawnOpts);
   try {
     await waitForEngineRunning(opts.port, opts.engineReadyTimeoutMs ?? 30_000);
   } catch (err) {

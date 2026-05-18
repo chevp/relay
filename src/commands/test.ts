@@ -21,6 +21,7 @@ interface TestOptions {
   out?: string;
   repo?: string;
   commandTimeout?: string;
+  input?: string;
 }
 
 export function registerTest(program: Command): void {
@@ -32,12 +33,16 @@ export function registerTest(program: Command): void {
     .option('--out <dir>', 'Output directory (default: <scenario-dir>/_results/<scenario-name>/)')
     .option('--repo <path>', 'Repo root (default: cwd auto-detected)')
     .option('--command-timeout <ms>', 'Per-WS-command timeout in ms', '15000')
+    .option('--input <path>', 'Positional input file (e.g. runtime.xml) passed to iris-player at spawn')
     .action(async (scenarioPath: string, opts: TestOptions) => {
       try {
-        const repoRoot = opts.repo ? path.resolve(opts.repo) : await findRepoRoot(process.cwd());
-        const playerPath = opts.player
-          ? path.resolve(opts.player)
-          : path.join(repoRoot, 'cpp', 'build', 'bin', 'Release', 'nuna-player.exe');
+        let playerPath: string;
+        if (opts.player) {
+          playerPath = path.resolve(opts.player);
+        } else {
+          const repoRoot = opts.repo ? path.resolve(opts.repo) : await findRepoRoot(process.cwd());
+          playerPath = path.join(repoRoot, 'cpp', 'build', 'bin', 'Release', 'nuna-player.exe');
+        }
         if (!existsSync(playerPath)) {
           console.error(pc.red(`[test] iris-player not found at ${playerPath} (use --player)`));
           process.exit(1);
@@ -49,6 +54,7 @@ export function registerTest(program: Command): void {
           port: parseInt(opts.port, 10),
           outDir: opts.out ? path.resolve(opts.out) : undefined,
           commandTimeoutMs: opts.commandTimeout ? parseInt(opts.commandTimeout, 10) : undefined,
+          inputFile: opts.input ? path.resolve(opts.input) : undefined,
         });
 
         process.exit(result.status === 'ok' ? 0 : 1);

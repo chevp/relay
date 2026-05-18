@@ -32,6 +32,8 @@ export interface RunOptions {
   outDir?: string;
   /** Per-command WS timeout in ms. */
   commandTimeoutMs?: number;
+  /** Optional input file (e.g. runtime.xml) passed as a positional to iris-player. */
+  inputFile?: string;
 }
 
 export interface StepResult {
@@ -94,6 +96,7 @@ export async function runScenario(opts: RunOptions): Promise<RunResult> {
     playerPath: opts.playerPath,
     port: opts.port,
     cwd: path.dirname(opts.playerPath),
+    extraArgs: opts.inputFile ? [path.resolve(opts.inputFile)] : undefined,
   });
   daemon.process.on('exit', (code) => {
     if (code !== 0 && code !== null) {
