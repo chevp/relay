@@ -1,0 +1,65 @@
+# default-game — runs `relay build` against examples/default-game and
+# uploads the resulting .nuna bundle. Focused workflow: no smoke-serve,
+# no release publishing — just the actual build.
+#
+# Triggered on every push and PR so the build is exercised continuously,
+# not only when the example folder changes.
+
+name: default-game
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: relay build examples/default-game
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Compile relay
+        run: pnpm build
+
+      - name: Install relay globally from this checkout
+        run: npm install -g .
+
+      - name: Run relay build
+        working-directory: examples/default-game
+        run: |
+          mkdir -p ../../dist
+          relay build --out ../../dist/default-game.nuna --verbose
+
+      - name: Inspect bundle
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends sqlite3
+          echo "── schema ──"
+          sqlite3 dist/default-game.nuna '.schema'
+          echo "── files ──"
+          sqlite3 -header -column dist/default-game.nuna \
+            'SELECT path, mime, size, hex(substr(sha256,1,8)) AS sha8 FROM files ORDER BY path;'
+          echo "── manifest ──"
+          sqlite3 -header -column dist/default-game.nuna 'SELECT * FROM manifest;'
+          count=$(sqlite3 dist/default-game.nuna 'SELECT count(*) FROM files;')
+          test "$count" -gt 0 || { echo "bundle is empty"; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: default-game.nuna
+          path: dist/default-game.nuna
+          if-no-files-found: error

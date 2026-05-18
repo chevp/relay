@@ -1,0 +1,137 @@
+# build-default-game — CI for examples/default-game.
+#
+# Demonstrates two ways to ship a game from relay:
+#   Weg A — smoke-serve + tarball:   relay serve → curl endpoints → tar.gz
+#   Weg B — bundle:                  relay build → .nuna SQLite single-file
+#
+# Both jobs publish their artifact; on push to main, the `release` job
+# attaches them to a GitHub Release for download.
+
+name: build-default-game
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'examples/default-game/**'
+      - 'src/**'
+      - 'package.json'
+      - '.github/workflows/build-default-game.yml'
+  pull_request:
+    paths:
+      - 'examples/default-game/**'
+      - 'src/**'
+  workflow_dispatch:
+
+jobs:
+  # ────────────────────────────────────────────────────────────────────────────
+  # Weg A — serve the folder, curl the canonical endpoints, archive as tarball.
+  # Tests the live HTTP surface. Produces default-game.tar.gz.
+  # ────────────────────────────────────────────────────────────────────────────
+  smoke-and-pack:
+    name: 'Weg A — smoke + tarball'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+      - name: Install relay globally from this checkout
+        run: npm install -g .
+
+      - name: Run smoke-test
+        working-directory: examples/default-game
+        run: ./smoke-test.sh
+
+      - name: Pack folder
+        run: |
+          mkdir -p dist
+          tar --exclude='smoke-test.sh' --exclude='Dockerfile' \
+              -czf dist/default-game.tar.gz \
+              -C examples default-game
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: default-game-tarball
+          path: dist/default-game.tar.gz
+          if-no-files-found: error
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Weg B — `relay build` produces a single-file SQLite bundle (.nuna).
+  # Verifies the bundle is well-formed (schema, manifest, file count).
+  # ────────────────────────────────────────────────────────────────────────────
+  bundle:
+    name: 'Weg B — relay build (.nuna)'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+      - name: Install relay globally from this checkout
+        run: npm install -g .
+
+      - name: Bundle default-game
+        working-directory: examples/default-game
+        run: |
+          mkdir -p ../../dist
+          relay build --out ../../dist/default-game.nuna --verbose
+
+      - name: Verify bundle schema
+        run: |
+          sudo apt-get install -y --no-install-recommends sqlite3
+          sqlite3 dist/default-game.nuna '.schema files' | grep -q 'sha256'
+          sqlite3 dist/default-game.nuna '.schema manifest' | grep -q 'value'
+          count=$(sqlite3 dist/default-game.nuna 'SELECT count(*) FROM files;')
+          echo "files in bundle: $count"
+          test "$count" -gt 0
+          sqlite3 dist/default-game.nuna 'SELECT key, value FROM manifest;'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: default-game-bundle
+          path: dist/default-game.nuna
+          if-no-files-found: error
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Release — attach both artifacts to a GitHub Release on main pushes.
+  # ────────────────────────────────────────────────────────────────────────────
+  release:
+    name: Attach to GitHub Release
+    needs: [smoke-and-pack, bundle]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: default-game-${{ github.run_number }}
+          name: 'default-game build #${{ github.run_number }}'
+          files: |
+            dist/default-game.tar.gz
+            dist/default-game.nuna
+          fail_on_unmatched_files: true
