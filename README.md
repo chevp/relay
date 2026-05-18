@@ -120,8 +120,9 @@ src/
 
 `relay test <scenario.yaml>` runs a flat list of steps against
 `iris-player --daemon`, capturing screenshots and writing a
-`result.json` report. See [ADR-0008](../../runtime/iris/docs/adr/0008-scripted-scenario-runner-in-relay.md)
-for the full design rationale.
+`result.json` report. See **[docs/scenarios.md](docs/scenarios.md)** for
+full usage docs, and [ADR-0008](../../runtime/iris/docs/adr/0008-scripted-scenario-runner-in-relay.md)
+for the design rationale.
 
 ### Scenario file format (V1)
 
