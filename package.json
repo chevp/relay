@@ -1,6 +1,6 @@
 {
   "name": "@nuna/relay",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Nuna relay — serve, open, test, build, validate, mcp. Relays nuna:// URLs to the player.",
   "type": "module",
   "bin": {

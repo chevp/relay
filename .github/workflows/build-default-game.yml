@@ -105,10 +105,35 @@ jobs:
           test "$count" -gt 0
           sqlite3 dist/default-game.nuna 'SELECT key, value FROM manifest;'
 
+      - name: Verify CAS mirror
+        run: |
+          test -d dist/assets || { echo "dist/assets/ missing"; exit 1; }
+          bin_count=$(find dist/assets -maxdepth 1 -name '*.bin' | wc -l | tr -d ' ')
+          json_count=$(find dist/assets -maxdepth 1 -name '*.json' | wc -l | tr -d ' ')
+          test "$bin_count" = "$json_count" || { echo "mismatched .bin/.json: $bin_count vs $json_count"; exit 1; }
+          test "$bin_count" -gt 0 || { echo "no CAS entries"; exit 1; }
+          for bin in dist/assets/*.bin; do
+            sha=$(basename "$bin" .bin)
+            test -f "dist/assets/$sha.json" || { echo "missing sidecar for $bin"; exit 1; }
+            actual=$(sha256sum "$bin" | awk '{print $1}')
+            test "$actual" = "$sha" || { echo "hash mismatch: $bin actual=$actual"; exit 1; }
+          done
+          sqlite3 dist/default-game.nuna 'SELECT lower(hex(sha256)) FROM files;' | sort -u > /tmp/db_shas.txt
+          find dist/assets -maxdepth 1 -name '*.bin' -exec basename {} .bin \; | sort -u > /tmp/cas_shas.txt
+          missing=$(comm -23 /tmp/db_shas.txt /tmp/cas_shas.txt)
+          test -z "$missing" || { echo "CAS missing entries for:"; echo "$missing"; exit 1; }
+          echo "verified $bin_count CAS entries"
+
       - uses: actions/upload-artifact@v4
         with:
           name: default-game-bundle
           path: dist/default-game.nuna
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: default-game-cas
+          path: dist/assets/
           if-no-files-found: error
 
   # ────────────────────────────────────────────────────────────────────────────
