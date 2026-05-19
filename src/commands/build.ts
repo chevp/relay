@@ -32,6 +32,8 @@ export interface BuildResult {
   bundlePath: string;
   fileCount: number;
   totalBytes: number;
+  casDir: string;
+  casFileCount: number;
 }
 
 const MIME_BY_EXT: Record<string, string> = {
@@ -122,9 +124,67 @@ export async function runBuild(opts: BuildOptions): Promise<BuildResult> {
     insertMeta.run('builtAt', new Date().toISOString());
     insertMeta.run('source', inputAbs);
 
-    return { bundlePath: outAbs, fileCount, totalBytes };
+    const casDir = path.join(path.dirname(outAbs), 'assets');
+    const casFileCount = await writeContentAddressed(walked, casDir, opts.verbose);
+
+    return { bundlePath: outAbs, fileCount, totalBytes, casDir, casFileCount };
   } finally {
     db.close();
+  }
+}
+
+/**
+ * Mirror every walked file into a content-addressed store at `<casDir>/<sha>.bin`
+ * plus a `<sha>.json` sidecar. Filename = SHA-256 means any content change
+ * yields a new URL, sidestepping browser/CDN cache staleness for the runtime.
+ *
+ * Idempotent: identical bytes hash identically and are skipped on subsequent
+ * builds (and within a single build, when the same content appears at multiple
+ * paths). On duplicates, the first relPath wins (input is sorted, so it's
+ * deterministic — the lexicographically smallest path).
+ */
+async function writeContentAddressed(
+  walked: WalkedFile[],
+  casDir: string,
+  verbose: boolean
+): Promise<number> {
+  await fs.mkdir(casDir, { recursive: true });
+  const seen = new Set<string>();
+  let written = 0;
+  for (const e of walked) {
+    const sha = e.sha256.toString('hex');
+    if (seen.has(sha)) continue;
+    seen.add(sha);
+
+    const binPath = path.join(casDir, `${sha}.bin`);
+    const jsonPath = path.join(casDir, `${sha}.json`);
+    const existed = await fileExists(binPath);
+    if (!existed) {
+      await fs.writeFile(binPath, e.content);
+    }
+    if (!(await fileExists(jsonPath))) {
+      const sidecar = {
+        sha256: sha,
+        size: e.size,
+        mime: e.mime,
+        originalPath: e.relPath,
+      };
+      await fs.writeFile(jsonPath, JSON.stringify(sidecar, null, 2) + '\n');
+    }
+    if (!existed) written += 1;
+    if (verbose && !existed) {
+      console.log(pc.dim(`  cas ${sha.slice(0, 12)}… ← ${e.relPath}`));
+    }
+  }
+  return written;
+}
+
+async function fileExists(p: string): Promise<boolean> {
+  try {
+    await fs.access(p);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -187,6 +247,7 @@ function printBanner(result: BuildResult): void {
   console.log(pc.dim(`  bundle:   ${result.bundlePath}`));
   console.log(pc.dim(`  files:    ${result.fileCount}`));
   console.log(pc.dim(`  bytes:    ${result.totalBytes}`));
+  console.log(pc.dim(`  cas dir:  ${result.casDir} (${result.casFileCount} new)`));
   console.log();
 }
 
