@@ -1,0 +1,14 @@
+#!/usr/bin/env node
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { dirname, join } from "node:path";
+import { existsSync } from "node:fs";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const compiled = join(here, "..", "dist", "cli.js");
+
+if (!existsSync(compiled)) {
+  console.error("relay: dist/cli.js not found — run 'pnpm build' first (or 'pnpm dev -- <cmd>' during development)");
+  process.exit(1);
+}
+
+await import(pathToFileURL(compiled).href);

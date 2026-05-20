@@ -1,8 +1,10 @@
 # @nuna/relay
 
-Nuna relay — pure TypeScript / Node ≥20. Relays `nuna://` URLs and
-orchestrates serving, opening, validating, building for Nuna games.
-Contains **no native code**.
+Nuna relay — TypeScript / Node ≥20. Relays `nuna://` URLs and orchestrates
+serving, opening, validating, building, and asset-packing for Nuna games.
+Relay's own code is pure TypeScript; heavy asset-processing is delegated to
+[`irisproc`](#asset-workers-irisproc), a native helper binary bundled via
+`optionalDependencies`.
 
 ---
 
@@ -17,6 +19,7 @@ Vulkan renderer:
 | `relay open`     | `serve` + hands `nuna://play?discovery=…` to the OS URL handler. |
 | `relay validate` | Game validation against the Synth Protocol schema.          |
 | `relay build`    | Game build pipeline.                                        |
+| `relay pack`     | Build an iris asset pack from a TOML definition. Delegates to `irisproc` (see [Asset workers](#asset-workers-irisproc)). |
 | `relay mcp`      | MCP server for AI tooling.                                  |
 | `relay test`     | Scripted scenario runner — drives `iris-player --daemon` from a YAML scenario file (see [Scenarios](#scenarios)). |
 | `relay story`    | Story / artifact-pipeline orchestration.                    |
@@ -90,6 +93,66 @@ Both channels ship the **same exe** built by the same CI job — see the
 
 ---
 
+## Asset workers (`irisproc`)
+
+CPU-heavy asset processing — shader compilation, texture encoding, mesh
+optimization, scene linking, pack-building — lives in a separate native
+helper called [`irisproc`](https://github.com/chevp/iris/tree/main/apps/irisproc),
+shipped from the iris repo. relay never compiles a shader or encodes a
+texture itself; it shells out.
+
+```
+relay pack packs/base.toml
+   │
+   └──spawn──▶  irisproc pack packs/base.toml --out dist/
+                 (C++ exe — shaderc, basisu, meshoptimizer, libarchive)
+```
+
+### How the binary lands on your machine
+
+`@nuna/relay` declares `optionalDependencies` on per-platform packages
+that contain just the prebuilt `irisproc` binary (same pattern as esbuild,
+swc, sharp, `@nuna/player`):
+
+| Package                       | Contents                | When installed |
+| ----------------------------- | ----------------------- | -------------- |
+| `@nuna/irisproc-linux-x64`    | `bin/irisproc`          | Linux x64 hosts |
+| `@nuna/irisproc-win32-x64`    | `bin/irisproc.exe`      | Windows x64 hosts |
+
+`npm install -g @nuna/relay` pulls relay plus the one matching binary
+package — the others are silently skipped via `os`/`cpu` constraints.
+
+macOS bindings are temporarily not published. On a Mac, relay falls back
+to `$PATH` lookup or a local dev build (see below).
+
+### Resolution order
+
+relay's [`src/tools/irisproc.ts`](src/tools/irisproc.ts) tries three
+sources, in this order:
+
+1. **Bundled npm package** — `@nuna/irisproc-<platform>-<arch>/bin/irisproc`.
+2. **`$PATH`** — for users who downloaded the binary manually from
+   [chevp/iris releases](https://github.com/chevp/iris/releases) and put
+   it on `PATH`.
+3. **Local dev build** — if you're in the kosmos monorepo and ran
+   `cmake -B build-irisproc -S apps/irisproc` inside `runtime/iris/`,
+   relay picks that up without needing an `npm link`.
+
+If all three miss, the error message lists every install path with a
+concrete command.
+
+### Publishing the bindings (maintainers)
+
+Bindings are published from this repo, not from iris. The
+[`publish-irisproc-bindings`](.github/workflows/publish-irisproc-bindings.yml)
+workflow downloads a chosen `irisproc-*` release from `chevp/iris`, wraps
+each platform binary into a tiny npm package, and publishes to npm. Run
+it manually with the iris tag and the target npm version; use
+`dry_run: true` to inspect the produced tarballs as artifacts before
+hitting the registry.
+
+---
+
 ## Local development
 
 ```bash
@@ -106,6 +169,7 @@ Source layout:
 src/
 ├── cli.ts              ← entry point, command registration
 ├── commands/           ← one file per subcommand
+├── tools/              ← wrappers around external binaries (irisproc, …)
 ├── server.ts           ← Fastify server
 ├── config/             ← nuna-serve.xml loader
 ├── discovery/          ← /discover.json + connectivity checks

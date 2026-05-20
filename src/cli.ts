@@ -17,8 +17,10 @@ import pc from 'picocolors';
 import { VERSION } from './version.js';
 import { registerServe } from './commands/serve.js';
 import { registerOpen } from './commands/open.js';
+import { registerDev } from './commands/dev.js';
 import { registerTest } from './commands/test.js';
 import { registerBuild } from './commands/build.js';
+import { registerPack } from './commands/pack.js';
 import { registerValidate } from './commands/validate.js';
 import { registerMcp } from './commands/mcp.js';
 import { registerStory } from './commands/story.js';
@@ -32,8 +34,10 @@ async function main(): Promise<void> {
 
   registerServe(program);
   registerOpen(program);
+  registerDev(program);
   registerTest(program);
   registerBuild(program);
+  registerPack(program);
   registerValidate(program);
   registerMcp(program);
   registerStory(program);

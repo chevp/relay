@@ -4,7 +4,7 @@
   "description": "Nuna relay — serve, open, test, build, validate, mcp. Relays nuna:// URLs to the player.",
   "type": "module",
   "bin": {
-    "relay": "./dist/cli.js"
+    "relay": "./bin/relay"
   },
   "main": "./dist/cli.js",
   "scripts": {
@@ -39,7 +39,12 @@
     "typescript": "^5.6.3",
     "vitest": "^4.1.6"
   },
+  "optionalDependencies": {
+    "@nuna/irisproc-linux-x64": "^0.5.0",
+    "@nuna/irisproc-win32-x64": "^0.5.0"
+  },
   "files": [
+    "bin",
     "dist",
     "schema",
     "ui",

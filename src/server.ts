@@ -78,6 +78,15 @@ export async function createServer(ctx: ServerContext): Promise<FastifyInstance>
     return buildDiscovery(ctx.config, ctx.version, ctx.publicHost);
   });
 
+  // Machine-readable hint for AI agents (Claude etc.). Tells the agent what
+  // relay is, where the game files live, and that it should traverse those
+  // files directly — no extra parsing endpoints needed because iris-player
+  // loads from the same paths. Read-only.
+  app.get('/api/agent.json', async (_req, reply) => {
+    reply.header('Cache-Control', 'no-cache');
+    return buildAgentManifest(ctx);
+  });
+
   app.setNotFoundHandler((_req, reply) => {
     reply.code(404).send({ error: 'not_found' });
   });
@@ -123,6 +132,56 @@ async function registerStaticRoot(
       ? (res) => { res.setHeader('Cache-Control', 'no-cache'); }
       : undefined,
   });
+}
+
+interface AgentManifest {
+  name: string;
+  version: string;
+  role: string;
+  capabilities: string[];
+  endpoints: Array<{ method: string; url: string; description: string }>;
+  game_roots: Array<{ alias: string; mount: string; manifest: string; description: string }>;
+  guidance: string;
+}
+
+function buildAgentManifest(ctx: ServerContext): AgentManifest {
+  const gameRoots = ctx.config.staticRoots.map((r) => ({
+    alias: r.alias,
+    mount: r.mount,
+    manifest: path.posix.join(r.mount, 'manifest.json'),
+    description:
+      r.alias === 'game'
+        ? 'Active game folder. Contains iris.xml (renderer + scene entry-point), scenes/*.json (entity definitions), assets/ (GLTF + textures), scripts/, kits/ etc. iris-player loads from here.'
+        : r.alias === 'assets'
+        ? 'Exported assets directory (optional).'
+        : r.alias === 'configs'
+        ? 'Per-game configs (no-cache).'
+        : `Static root '${r.alias}'.`,
+  }));
+
+  return {
+    name: 'relay',
+    version: ctx.version,
+    role:
+      'HTTP dev server in front of an iris-player game folder. Files served here are the same files the player loads — read them directly to understand or describe the game; there is no parsed-scene API on purpose.',
+    capabilities: ['read'],
+    endpoints: [
+      { method: 'GET', url: '/discover.json', description: 'Static roots + their mount URLs + server version.' },
+      { method: 'GET', url: '/health',        description: 'Liveness probe.' },
+      { method: 'GET', url: '/api/agent.json', description: 'This document.' },
+      ...gameRoots.flatMap((g) => [
+        { method: 'GET', url: g.manifest, description: `SHA-256 file manifest for the '${g.alias}' root.` },
+        { method: 'GET', url: `${g.mount}<path>`, description: `Any file under the '${g.alias}' root.` },
+      ]),
+    ],
+    game_roots: gameRoots,
+    guidance:
+      "Start at /discover.json (or game_roots above) to find the game mount — by convention /games/current/v-dev/. " +
+      'Read <mount>iris.xml first: it points at the active scene file, declares <asset-root>, <shader-dir>, etc. ' +
+      'Then read the scene file referenced by <scene uri="..."/> — typically scenes/main.scene.json — for the entity list. ' +
+      "Entity assetRefs use 'asset://<path>' which resolves against the iris.xml <asset-root>. " +
+      'GLTF files are the actual 3D models; you can fetch them as binary. No write endpoints exist — edits go through normal filesystem tools.',
+  };
 }
 
 async function pathExists(p: string): Promise<boolean> {

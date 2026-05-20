@@ -1,0 +1,180 @@
+# publish-irisproc-bindings — bundle irisproc binaries into npm platform packages.
+#
+# Weg B of the irisproc distribution plan: this repo (relay/kosmos) owns the
+# npm publish, the iris repo owns the C++ build. This workflow:
+#   1. Downloads irisproc-{linux,windows} assets from a chevp/iris release.
+#   2. Wraps each binary into a tiny per-platform npm package
+#      (@nuna/irisproc-linux-x64, @nuna/irisproc-win32-x64).
+#   3. Publishes those packages to npm with the requested version, so
+#      @nuna/relay's optionalDependencies pick them up on install.
+#
+# Why per-platform packages: see the `optionalDependencies` pattern used by
+# esbuild, swc, sharp, @nuna/player. npm installs only the one matching the
+# user's OS/arch, so end users get one bundled binary, no manual download.
+#
+# macOS bindings are intentionally not produced yet — see the matrix.
+
+name: publish-irisproc-bindings
+
+on:
+  workflow_dispatch:
+    inputs:
+      iris_tag:
+        description: 'iris release tag to bundle (e.g. irisproc-42)'
+        required: true
+        type: string
+      package_version:
+        description: 'npm version to publish as (must satisfy @nuna/relay optionalDependencies range)'
+        required: true
+        type: string
+      dry_run:
+        description: 'Build the packages and upload as workflow artifacts, but skip npm publish'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  bind:
+    name: '@nuna/irisproc-${{ matrix.platform }}-${{ matrix.arch }}'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        # macOS intentionally omitted — no darwin asset in build-irisproc.yml yet.
+        include:
+          - platform: linux
+            arch: x64
+            asset: irisproc-linux.tar.gz
+            extract: tar
+            ext: ''
+          - platform: win32
+            arch: x64
+            asset: irisproc-windows.zip
+            extract: zip
+            ext: '.exe'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Download asset from chevp/iris release
+        env:
+          GH_TOKEN: ${{ secrets.IRIS_RELEASES_TOKEN || github.token }}
+        run: |
+          set -e
+          mkdir -p staging
+          gh release download "${{ inputs.iris_tag }}" \
+            --repo chevp/iris \
+            --pattern "${{ matrix.asset }}" \
+            --dir staging
+          ls -lh staging/
+
+      - name: Extract binary
+        run: |
+          set -e
+          cd staging
+          if [ "${{ matrix.extract }}" = "zip" ]; then
+            unzip -q "${{ matrix.asset }}"
+          else
+            tar -xzf "${{ matrix.asset }}"
+          fi
+          ls -la
+          test -f "irisproc${{ matrix.ext }}" || { echo "binary missing"; exit 1; }
+
+      - name: Build platform package
+        id: pkg
+        run: |
+          set -e
+          PKG_NAME="@nuna/irisproc-${{ matrix.platform }}-${{ matrix.arch }}"
+          PKG_DIR="pkg/${{ matrix.platform }}-${{ matrix.arch }}"
+          BIN="irisproc${{ matrix.ext }}"
+
+          mkdir -p "$PKG_DIR/bin"
+          cp "staging/$BIN" "$PKG_DIR/bin/$BIN"
+          chmod +x "$PKG_DIR/bin/$BIN" || true
+
+          cat > "$PKG_DIR/package.json" <<EOF
+          {
+            "name": "$PKG_NAME",
+            "version": "${{ inputs.package_version }}",
+            "description": "Platform binary of irisproc (${{ matrix.platform }} ${{ matrix.arch }}) for @nuna/relay.",
+            "os": ["${{ matrix.platform }}"],
+            "cpu": ["${{ matrix.arch }}"],
+            "files": ["bin"],
+            "repository": {
+              "type": "git",
+              "url": "https://github.com/chevp/iris.git",
+              "directory": "apps/irisproc"
+            },
+            "homepage": "https://github.com/chevp/iris/tree/main/apps/irisproc",
+            "license": "MIT",
+            "publishConfig": {
+              "access": "public"
+            }
+          }
+          EOF
+
+          cat > "$PKG_DIR/README.md" <<EOF
+          # $PKG_NAME
+
+          Platform-specific binary of \`irisproc\` for \`${{ matrix.platform }}\` \`${{ matrix.arch }}\`.
+
+          Bundled by [\`@nuna/relay\`](https://www.npmjs.com/package/@nuna/relay)
+          via \`optionalDependencies\`. You do not depend on this package directly.
+
+          Source: [chevp/iris @ ${{ inputs.iris_tag }}](https://github.com/chevp/iris/releases/tag/${{ inputs.iris_tag }})
+          EOF
+
+          echo "name=$PKG_NAME" >> "$GITHUB_OUTPUT"
+          echo "dir=$PKG_DIR"   >> "$GITHUB_OUTPUT"
+
+          echo "── package.json ──"
+          cat "$PKG_DIR/package.json"
+          echo "── contents ──"
+          find "$PKG_DIR" -type f
+
+      - name: Pack (dry-run inspection)
+        working-directory: ${{ steps.pkg.outputs.dir }}
+        run: |
+          npm pack --dry-run
+
+      - name: Publish to npm
+        if: ${{ !inputs.dry_run }}
+        working-directory: ${{ steps.pkg.outputs.dir }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pkg-${{ matrix.platform }}-${{ matrix.arch }}
+          path: ${{ steps.pkg.outputs.dir }}/
+          retention-days: 30
+
+  summary:
+    name: Summary
+    needs: bind
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print outcome
+        run: |
+          echo "iris tag bundled:    ${{ inputs.iris_tag }}"
+          echo "npm version:         ${{ inputs.package_version }}"
+          echo "dry-run:             ${{ inputs.dry_run }}"
+          echo ""
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "Packages were built and uploaded as artifacts but NOT published to npm."
+          else
+            echo "Packages published:"
+            echo "  @nuna/irisproc-linux-x64@${{ inputs.package_version }}"
+            echo "  @nuna/irisproc-win32-x64@${{ inputs.package_version }}"
+            echo ""
+            echo "Next: bump @nuna/relay version to range that accepts this version,"
+            echo "      and republish @nuna/relay."
+          fi
