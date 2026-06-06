@@ -27,8 +27,12 @@ import { promises as fs } from 'node:fs';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import type WebSocket from 'ws';
 import { runServe, type ServeOptions } from './serve.js';
 import { DEFAULT_PORT, DEFAULT_HOST } from '../config/ServeConfig.js';
+import { connect, waitForEngineRunning } from '../daemon/ipc.js';
+import { attachEventListener } from '../daemon/events.js';
+import { handleDaemonEvent } from '../daemon/contextMenu.js';
 
 interface DevOptions {
   port: string;
@@ -36,6 +40,7 @@ interface DevOptions {
   player?: string;
   watch: boolean;
   color: boolean;
+  daemonPort: string;
 }
 
 export function registerDev(program: Command): void {
@@ -46,6 +51,7 @@ export function registerDev(program: Command): void {
     .option('-p, --port <n>', 'Relay port', String(DEFAULT_PORT))
     .option('-h, --host <addr>', 'Relay bind host', DEFAULT_HOST)
     .option('--player <path>', 'Path to iris-player binary (overrides $RELAY_PLAYER and auto-discovery)')
+    .option('--daemon-port <n>', 'Run iris-player with its WebSocket daemon on this port and wire the right-click context-menu event channel (0 = off)', '0')
     .option('--no-watch', 'Disable manifest regeneration on file change')
     .option('--no-color', 'Disable ANSI color output')
     .allowUnknownOption(true)
@@ -77,6 +83,11 @@ async function runDev(example: string | undefined, opts: DevOptions): Promise<nu
   // back via process.argv (it doesn't strip the separator), so we slice here.
   const sepIdx = process.argv.indexOf('--');
   const playerExtraArgs = sepIdx >= 0 ? process.argv.slice(sepIdx + 1) : [];
+
+  // Optional daemon: enables the WebSocket sidecar so relay can drive the
+  // right-click context menu (synth-XML in, click events out).
+  const daemonPort = parseInt(opts.daemonPort, 10) || 0;
+  const daemonArgs = daemonPort > 0 ? ['--daemon', '--port', String(daemonPort)] : [];
 
   // Start serve in-process pointing at the game folder via the default
   // config (mounts cwd as /games/current/v-dev/ plus optional assets/configs).
@@ -111,16 +122,38 @@ async function runDev(example: string | undefined, opts: DevOptions): Promise<nu
   if (playerExtraArgs.length) {
     console.log(`  ${pc.dim('args:')}     ${playerExtraArgs.join(' ')}`);
   }
+  if (daemonPort > 0) {
+    console.log(`  ${pc.dim('daemon:')}   ws://127.0.0.1:${daemonPort} ${pc.dim('(context menu)')}`);
+  }
   console.log();
 
-  const child = spawn(playerPath, [xmlPath, ...playerExtraArgs], {
+  const child = spawn(playerPath, [xmlPath, ...daemonArgs, ...playerExtraArgs], {
     stdio: 'inherit',
   });
+
+  // Persistent daemon connection for the context-menu event channel. Opened
+  // asynchronously once the engine is up; kept alive for the session.
+  let daemonWs: WebSocket | null = null;
+  let detachEvents: (() => void) | null = null;
+  if (daemonPort > 0) {
+    void (async () => {
+      try {
+        await waitForEngineRunning(daemonPort, 30_000);
+        daemonWs = await connect(`ws://127.0.0.1:${daemonPort}`, 3_000);
+        detachEvents = attachEventListener(daemonWs, handleDaemonEvent);
+        console.log(pc.dim(`[relay dev] context-menu channel connected (:${daemonPort})`));
+      } catch (err) {
+        console.error(pc.yellow(`[relay dev] context-menu channel unavailable: ${(err as Error).message}`));
+      }
+    })();
+  }
 
   const shutdown = async (signal: NodeJS.Signals | null) => {
     if (signal && child.exitCode === null && !child.killed) {
       child.kill(signal);
     }
+    try { detachEvents?.(); } catch { /* noop */ }
+    try { daemonWs?.close(); } catch { /* already closed */ }
     try { await server.close(); } catch { /* already closed */ }
   };
 
