@@ -40,8 +40,10 @@ export function buildMenuXml(req: { x: number; y: number; entity: string }): str
     <separator/>
     <action id="delete"  label="Delete" event="entity.delete" danger="true"/>`
     : `
-    <action id="add"   label="Add Entity…" event="scene.add"/>
-    <action id="paste" label="Paste"       event="clipboard.paste"/>`;
+    <action id="add"            label="Add Entity…"            event="scene.add"/>
+    <action id="paste"          label="Paste"                  event="clipboard.paste"/>
+    <separator/>
+    <action id="save-cam-default" label="Save Camera as Default" event="camera.saveDefault"/>`;
 
   return `<synth xmlns="${SYNTH_NS}">
   <context-menu x="${Math.round(req.x)}" y="${Math.round(req.y)}" entity="${xmlAttr(e)}">${items}
