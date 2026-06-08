@@ -19,6 +19,9 @@ import path from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { ProcessRegistry } from './registry.js';
 import { runGtest, killActiveGtest } from '../gtest/runner.js';
+import { runShots, killActiveShots } from '../shots/runner.js';
+import { runAtlas, killActiveAtlas } from '../atlas/runner.js';
+import { runFlow, killActiveFlows } from '../flow/runner.js';
 import { VERSION } from '../version.js';
 
 export interface DaemonOptions {
@@ -54,6 +57,9 @@ export async function startDaemonServer(opts: DaemonOptions): Promise<DaemonServ
 
   const close = async (): Promise<void> => {
     killActiveGtest();
+    killActiveShots();
+    killActiveAtlas();
+    killActiveFlows();
     registry.killAll();
     for (const client of wss.clients) { try { client.close(); } catch { /* ignore */ } }
     await new Promise<void>((resolve) => wss.close(() => resolve()));
@@ -83,13 +89,29 @@ function buildHandlers(registry: ProcessRegistry, startedAtMs: number): Map<stri
     return { killed: registry.kill(id) };
   });
 
-  m.set('gtest.run', async (args, push) => {
+  // Workload commands. Each streams live progress (so the container UI updates)
+  // then returns the final run. `workspace` defaults to the descriptor's dir.
+  const fileAndWorkspace = (args: Record<string, unknown>, cmd: string): [string, string] => {
     const file = args.file;
-    if (typeof file !== 'string' || !file) throw new Error('gtest.run requires args.file');
-    const workspace = typeof args.workspace === 'string' ? args.workspace : path.dirname(file);
-    // Stream live per-stage progress so clients (the container UI) update as the
-    // run advances, then return the final run as the call result.
+    if (typeof file !== 'string' || !file) throw new Error(`${cmd} requires args.file`);
+    return [file, typeof args.workspace === 'string' ? args.workspace : path.dirname(file)];
+  };
+
+  m.set('gtest.run', async (args, push) => {
+    const [file, workspace] = fileAndWorkspace(args, 'gtest.run');
     return runGtest(file, workspace, (run) => push({ type: 'gtest.progress', run }));
+  });
+  m.set('shots.run', async (args, push) => {
+    const [file, workspace] = fileAndWorkspace(args, 'shots.run');
+    return runShots(file, workspace, (run) => push({ type: 'shots.progress', run }));
+  });
+  m.set('atlas.run', async (args, push) => {
+    const [file, workspace] = fileAndWorkspace(args, 'atlas.run');
+    return runAtlas(file, workspace, (run) => push({ type: 'atlas.progress', run }));
+  });
+  m.set('flow.run', async (args, push) => {
+    const [file, workspace] = fileAndWorkspace(args, 'flow.run');
+    return runFlow(file, workspace, (run) => push({ type: 'flow.progress', run }));
   });
 
   // `shutdown` is handled in dispatch (it must reply before tearing down).

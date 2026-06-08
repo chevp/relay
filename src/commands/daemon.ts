@@ -39,7 +39,7 @@ export function registerDaemon(program: Command): void {
       console.log();
       console.log(pc.bold(pc.cyan('  relay daemon')) + pc.dim(`  v${VERSION}`));
       console.log(pc.dim(`  control:  ws://${opts.host}:${server.port}`));
-      console.log(pc.dim('  cmds:     ping · ps · kill · gtest.run · shutdown'));
+      console.log(pc.dim('  cmds:     ping · ps · kill · gtest.run · shots.run · atlas.run · flow.run · shutdown'));
       console.log(pc.dim('  Ctrl-C or send `shutdown` to stop.'));
       console.log();
 
