@@ -1,256 +1,360 @@
 /**
- * `.gtest` runner — drives iris-player headless and evaluates asserts.
+ * `.gtest` runner — end-to-end game-state tests, headless, in relay.
  *
- * Thin orchestrator (mirrors scenario/runner.ts): spawn iris-player in daemon
- * mode, connect to its Storybook WS, run each stage (init → camera → wait →
- * capture → asserts), aggregate a pass/fail verdict, write result.json, exit
- * non-zero on any failed/errored assert. No Electron, no display.
+ * Ported from the kosmos container (container/src/gtest.ts) so test runs no
+ * longer require the Electron shell. Each stage boots iris-preview headlessly,
+ * runs server setup, executes the stage `init` snippet, positions the camera,
+ * settles, captures a JPEG, then checks DB (SQLite) and server (HTTP)
+ * assertions. relay setup/assertions need a live connected player and are
+ * reported "deferred" in V1 — identical to the container's behaviour.
  *
- * Daemon cmds used: `loadScene`, `setCamera`, `capture`, `shutdown` (exist
- * today) plus `eval` (stage init), `status` and `getEntity` (engine-state
- * asserts) — the latter three are NEW handlers required in iris-player's
- * StorybookDaemon (see PRD-001 cross-repo dependency). When the daemon does not
- * support a cmd, the dependent assert reports `error` (not a silent pass).
+ * DB assertions use better-sqlite3 (a relay dependency) instead of the
+ * container's sql.js. Output layout is unchanged: `.kosmos/gtest/<key>/run.json`
+ * + per-stage JPEG frames, so the container UI reads relay-produced runs as-is.
  */
 
-import { promises as fs } from 'node:fs';
+import fs from 'node:fs';
 import path from 'node:path';
-import { setTimeout as delay } from 'node:timers/promises';
-import pc from 'picocolors';
-import WebSocket from 'ws';
-import { connect, sendCmd } from '../daemon/ipc.js';
-import { spawnPlayerDaemon, shutdownPlayerDaemon, type PlayerHandle } from '../daemon/lifecycle.js';
-import { loadGTest, type Stage, type StageAssert, type Camera } from './schema.js';
+import Database from 'better-sqlite3';
+import { spawnPreview } from '../preview/launcher.js';
+import { PreviewClient } from '../preview/client.js';
+import { loadDescriptorSync, type GtestDescriptor, type GtestStage, type Camera } from './schema.js';
 import {
-  comparePixels, getPath, valuesEqual,
-  type AssertResult, type StageResult, type GTestResult,
+  applyOp, getNestedField,
+  type GtestAssertResult, type GtestRun, type GtestStageResult,
 } from './verdict.js';
 
-export interface RunGTestOptions {
-  gtestPath: string;
-  playerPath: string;
-  port: number;
-  /** Artefact root. Default `<gtest-dir>/_results/<name>/`. */
-  outDir?: string;
-  /** Baseline root for pixel asserts. Default: the .gtest file's directory. */
-  baselineDir?: string;
-  /** Per-WS-command timeout (ms). */
-  commandTimeoutMs?: number;
-  /** Copy each captured frame over its baseline instead of comparing. */
-  updateBaselines?: boolean;
+const GTEST_PREVIEW_PORT = 9500;
+const SETTLE_MS = 600;
+const FRAME_TIMEOUT_MS = 10_000;
+const CONNECT_TIMEOUT_MS = 40_000;
+
+const wait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+let runningKey: string | null = null;
+let activeClient: PreviewClient | null = null;
+const activeChildren = new Set<import('node:child_process').ChildProcess>();
+
+/** A stable cache key from the descriptor path relative to the workspace. */
+export function gtestKey(descriptorPath: string, workspaceRoot: string): string {
+  let rel = path.relative(workspaceRoot, descriptorPath);
+  if (!rel || rel.startsWith('..')) rel = path.basename(descriptorPath);
+  return rel
+    .replace(/\.gtest$/i, '')
+    .replace(/[\\/]/g, '__')
+    .replace(/[^a-zA-Z0-9_.-]/g, '_');
 }
 
-const DEFAULT_COMMAND_TIMEOUT_MS = 15_000;
+export function gtestCacheDir(descriptorPath: string, workspaceRoot: string): string {
+  return path.join(workspaceRoot, '.kosmos', 'gtest', gtestKey(descriptorPath, workspaceRoot));
+}
 
-export async function runGTest(opts: RunGTestOptions): Promise<GTestResult> {
-  const commandTimeoutMs = opts.commandTimeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
-  const suite = await loadGTest(opts.gtestPath);
+// ── Assertions ───────────────────────────────────────────────────────────────
 
-  const gtestDir = path.dirname(suite.source);
-  const outDir = path.resolve(opts.outDir ?? path.join(gtestDir, '_results', slug(suite.name)));
-  const baselineDir = path.resolve(opts.baselineDir ?? gtestDir);
-  await fs.mkdir(outDir, { recursive: true });
-
-  const sceneInput = suite.scene ? path.resolve(gtestDir, suite.scene) : undefined;
-
-  console.log(pc.cyan(`[gtest] suite:    ${suite.source}`));
-  console.log(pc.cyan(`[gtest] name:     ${suite.name}`));
-  if (sceneInput) console.log(pc.cyan(`[gtest] scene:    ${sceneInput}`));
-  console.log(pc.cyan(`[gtest] player:   ${opts.playerPath}`));
-  console.log(pc.cyan(`[gtest] out:      ${outDir}`));
-  console.log(pc.cyan(`[gtest] stages:   ${suite.stages.length}`));
-
-  const startedAt = new Date();
-  const stageResults: StageResult[] = [];
-
-  const daemon: PlayerHandle = await spawnPlayerDaemon({
-    playerPath: opts.playerPath,
-    port: opts.port,
-    cwd: path.dirname(opts.playerPath),
-    extraArgs: sceneInput ? [sceneInput] : undefined,
-  });
-
-  let ws: WebSocket | null = null;
+function runDbAssertions(
+  asserts: NonNullable<GtestStage['assert']>['db'],
+  dbPath: string,
+  log: (l: string) => void,
+): GtestAssertResult[] {
+  const results: GtestAssertResult[] = [];
+  let db: Database.Database | null = null;
   try {
-    ws = await connect(`ws://127.0.0.1:${opts.port}`, 5_000);
-    const call = (cmd: string, args: Record<string, unknown> = {}): Promise<unknown> =>
-      sendCmd(ws!, cmd, args, commandTimeoutMs).then((r) => {
-        if (!r.ok) throw new Error(r.error ?? `daemon error (${cmd})`);
-        return r.result;
-      });
-
-    for (const stage of suite.stages) {
-      stageResults.push(await runStage(stage, { call, outDir, baselineDir, updateBaselines: !!opts.updateBaselines }));
+    db = new Database(dbPath, { readonly: true, fileMustExist: true });
+    for (const a of asserts ?? []) {
+      const label = `db: ${a.table}.${a.column}${a.where ? ` WHERE ${a.where}` : ''} ${a.op} ${a.value ?? ''}`.trim();
+      try {
+        const where = a.where ? ` WHERE ${a.where}` : '';
+        const actual = db.prepare(`SELECT ${a.column} FROM ${a.table}${where} LIMIT 1`).pluck().get() ?? null;
+        const passed = applyOp(a.op, actual, a.value);
+        log(`  ${passed ? 'PASS' : 'FAIL'} ${label} → got ${JSON.stringify(actual)}`);
+        results.push({ label, passed, actual, expected: a.value });
+      } catch (err) {
+        log(`  ERROR ${label}: ${(err as Error).message}`);
+        results.push({ label, passed: false, error: (err as Error).message });
+      }
+    }
+  } catch (err) {
+    log(`  DB open failed: ${(err as Error).message}`);
+    for (const a of asserts ?? []) {
+      results.push({ label: `db: ${a.table}.${a.column}`, passed: false, error: (err as Error).message });
     }
   } finally {
-    if (ws) { try { ws.close(); } catch { /* ignore */ } }
-    await shutdownPlayerDaemon(daemon);
+    try { db?.close(); } catch { /* ignore */ }
+  }
+  return results;
+}
+
+async function runServerAssertions(
+  asserts: NonNullable<GtestStage['assert']>['server'],
+  serverBase: string,
+  log: (l: string) => void,
+): Promise<GtestAssertResult[]> {
+  const results: GtestAssertResult[] = [];
+  for (const a of asserts ?? []) {
+    const url = `${serverBase.replace(/\/$/, '')}${a.path}`;
+    const label = `server: GET ${a.path}${a.field ? ` → ${a.field}` : ''} ${a.op} ${a.value ?? ''}`.trim();
+    try {
+      log(`  GET ${url}`);
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json: unknown = await res.json();
+      const actual = a.field ? getNestedField(json, a.field) : json;
+      const passed = applyOp(a.op, actual, a.value);
+      log(`  ${passed ? 'PASS' : 'FAIL'} ${label} → got ${JSON.stringify(actual)}`);
+      results.push({ label, passed, actual, expected: a.value });
+    } catch (err) {
+      log(`  ERROR ${label}: ${(err as Error).message}`);
+      results.push({ label, passed: false, error: (err as Error).message });
+    }
+  }
+  return results;
+}
+
+async function runServerSetup(
+  actions: NonNullable<NonNullable<GtestStage['setup']>['server']>,
+  serverBase: string,
+  log: (l: string) => void,
+): Promise<void> {
+  for (const a of actions) {
+    const url = `${serverBase.replace(/\/$/, '')}${a.path}`;
+    const method = (a.method ?? 'POST').toUpperCase();
+    log(`  ${method} ${url}`);
+    const res = await fetch(url, {
+      method,
+      headers: a.body ? { 'content-type': 'application/json' } : {},
+      body: a.body ? JSON.stringify(a.body) : undefined,
+    }).catch((err: Error) => { throw new Error(`server setup ${method} ${a.path} failed: ${err.message}`); });
+    if (!res.ok) throw new Error(`server setup ${method} ${a.path}: HTTP ${res.status}`);
+    log(`  ${res.status} OK`);
+  }
+}
+
+// ── iris-preview helpers ──────────────────────────────────────────────────────
+
+function nextFrame(client: PreviewClient, timeoutMs: number): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const onFrame = (buf: Buffer): void => { clearTimeout(timer); client.off('frame', onFrame); resolve(buf); };
+    const timer = setTimeout(() => {
+      client.off('frame', onFrame);
+      reject(new Error(`frame did not arrive within ${timeoutMs}ms`));
+    }, timeoutMs);
+    client.on('frame', onFrame);
+  });
+}
+
+function waitConnected(client: PreviewClient, timeoutMs: number, exited: () => Error | null): Promise<void> {
+  if (client.isConnected()) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const onConnected = (): void => { clearTimeout(timer); clearInterval(poll); client.off('connected', onConnected); resolve(); };
+    const fail = (e: Error): void => { clearTimeout(timer); clearInterval(poll); client.off('connected', onConnected); reject(e); };
+    const timer = setTimeout(() => fail(new Error('iris-preview did not come up in time')), timeoutMs);
+    const poll = setInterval(() => { const e = exited(); if (e) fail(e); }, 250);
+    client.on('connected', onConnected);
+  });
+}
+
+// ── Stage execution ──────────────────────────────────────────────────────────
+
+async function runStage(
+  stage: GtestStage,
+  stageIndex: number,
+  descriptor: GtestDescriptor,
+  cacheDir: string,
+  descriptorDir: string,
+  log: (l: string) => void,
+): Promise<{ screenshot?: string; asserts: GtestAssertResult[] }> {
+  const scenePath = path.resolve(descriptorDir, stage.scene ?? descriptor.scene ?? 'iris.xml');
+  const asserts: GtestAssertResult[] = [];
+
+  // ── relay setup (deferred — needs live player) ──
+  for (const a of stage.setup?.relay ?? []) {
+    asserts.push({
+      label: `relay setup: ${a.cmd}${a.id ? ` ${a.id}` : ''}`,
+      passed: false,
+      error: 'relay setup requires a live connected iris-player (not supported in headless run)',
+    });
   }
 
-  const status: GTestResult['status'] = stageResults.every((s) => s.status === 'pass') ? 'pass' : 'fail';
-  const result: GTestResult = {
-    gtest: suite.source,
-    name: suite.name,
-    status,
-    startedAt: startedAt.toISOString(),
-    durationMs: Date.now() - startedAt.getTime(),
-    outDir,
-    stages: stageResults,
+  // ── server setup ──
+  const serverActions = stage.setup?.server ?? [];
+  if (serverActions.length && descriptor.server) {
+    log('  server setup…');
+    await runServerSetup(serverActions, descriptor.server, log);
+  } else if (serverActions.length) {
+    log('  server setup: no "server" base URL in descriptor — skipped');
+  }
+
+  // ── screenshot ──
+  let screenshot: string | undefined;
+  if (stage.screenshot) {
+    log(`  boot iris-preview headless · ${path.basename(scenePath)}`);
+    const size = stage.screenshot.size;
+    const child = spawnPreview(scenePath, { port: GTEST_PREVIEW_PORT, fps: 4, width: size?.width, height: size?.height });
+    activeChildren.add(child);
+    let exited: Error | null = null;
+    child.on('exit', (code) => {
+      activeChildren.delete(child);
+      exited = new Error(`iris-preview exited (code ${code ?? '?'}) — check iris-preview.log`);
+    });
+
+    const client = new PreviewClient();
+    activeClient = client;
+    client.on('connected', () => {
+      client.call('disableOverlay').catch(() => { /* best-effort */ });
+      client.startStream({ fps: 4 }).catch(() => { /* best-effort */ });
+    });
+
+    try {
+      client.connect(`ws://127.0.0.1:${GTEST_PREVIEW_PORT}`);
+      await waitConnected(client, CONNECT_TIMEOUT_MS, () => exited);
+
+      if (stage.init) {
+        log(`  execScript: ${stage.init}`);
+        await client.call('execScript', { snippet: stage.init, chunkName: stage.name });
+      }
+
+      const cam: Camera = stage.screenshot.camera;
+      log(`  setCamera ${Object.entries(cam).map(([k, v]) => `${k} ${v}`).join(' · ')}`);
+      await client.call('setCamera', {
+        posX: cam.posX, posY: cam.posY, posZ: cam.posZ,
+        rotX: cam.rotX ?? 0, rotY: cam.rotY ?? 0, rotZ: cam.rotZ ?? 0,
+        ...(cam.fov !== undefined ? { fov: cam.fov } : {}),
+      });
+
+      const waitMs = stage.wait ?? 0;
+      if (waitMs > 0) { log(`  wait ${waitMs}ms`); await wait(waitMs); }
+      await wait(SETTLE_MS);
+
+      const frame = await nextFrame(client, FRAME_TIMEOUT_MS);
+      const file = `stage_${String(stageIndex).padStart(2, '0')}_${stage.name.replace(/[^a-zA-Z0-9_-]/g, '_')}.jpg`;
+      fs.writeFileSync(path.join(cacheDir, file), frame);
+      screenshot = file;
+      log(`  wrote ${file}`);
+    } finally {
+      try { client.disconnect(); } catch { /* ignore */ }
+      activeClient = null;
+      try { child.kill(); } catch { /* ignore */ }
+      activeChildren.delete(child);
+    }
+  }
+
+  // ── DB assertions ──
+  const dbAsserts = stage.assert?.db ?? [];
+  if (dbAsserts.length) {
+    const dbPath = descriptor.db ? path.resolve(descriptorDir, descriptor.db) : null;
+    if (dbPath && fs.existsSync(dbPath)) {
+      log(`  DB assertions on ${path.basename(dbPath)}:`);
+      asserts.push(...runDbAssertions(dbAsserts, dbPath, log));
+    } else {
+      const msg = dbPath ? `DB not found: ${dbPath}` : 'no "db" path in descriptor';
+      log(`  DB assertions: ${msg}`);
+      for (const a of dbAsserts) asserts.push({ label: `db: ${a.table}.${a.column}`, passed: false, error: msg });
+    }
+  }
+
+  // ── server assertions ──
+  const serverAsserts = stage.assert?.server ?? [];
+  if (serverAsserts.length) {
+    if (descriptor.server) {
+      log(`  server assertions on ${descriptor.server}:`);
+      asserts.push(...await runServerAssertions(serverAsserts, descriptor.server, log));
+    } else {
+      log('  server assertions: no "server" base URL in descriptor — skipped');
+      for (const a of serverAsserts) asserts.push({ label: `server: ${a.path}`, passed: false, error: 'no "server" base URL in descriptor' });
+    }
+  }
+
+  // ── relay assertions (deferred) ──
+  for (const a of stage.assert?.relay ?? []) {
+    asserts.push({
+      label: `relay: ${a.entity}.${a.component}${a.field ? `.${a.field}` : ''} ${a.op} ${a.value}`,
+      passed: false,
+      error: 'relay assertions require a live connected iris-player (not supported in headless run)',
+    });
+  }
+
+  return { screenshot, asserts };
+}
+
+// ── Orchestration ────────────────────────────────────────────────────────────
+
+export async function runGtest(
+  descriptorPath: string,
+  workspaceRoot: string,
+  onProgress?: (run: GtestRun) => void,
+): Promise<GtestRun> {
+  const key = gtestKey(descriptorPath, workspaceRoot);
+  if (runningKey) throw new Error('a gtest run is already in progress');
+  runningKey = key;
+
+  const descriptor = loadDescriptorSync(descriptorPath);
+  const cacheDir = gtestCacheDir(descriptorPath, workspaceRoot);
+  fs.mkdirSync(cacheDir, { recursive: true });
+  const descriptorDir = path.dirname(descriptorPath);
+
+  const run: GtestRun = {
+    descriptor: descriptorPath,
+    name: descriptor.name ?? path.basename(descriptorPath, '.gtest'),
+    startedAt: new Date().toISOString(),
+    status: 'running',
+    stages: descriptor.stages.map<GtestStageResult>((s) => ({ name: s.name, status: 'queued', asserts: [], log: [] })),
   };
 
-  await fs.writeFile(path.join(outDir, 'result.json'), JSON.stringify(result, null, 2), 'utf-8');
-
-  const passed = stageResults.filter((s) => s.status === 'pass').length;
-  console.log((status === 'pass' ? pc.green : pc.red)(
-    `\n[gtest] ${passed}/${stageResults.length} stages passed — ${status.toUpperCase()}`));
-  console.log(pc.cyan(`[gtest] result:   ${path.join(outDir, 'result.json')}`));
-  return result;
-}
-
-interface StageCtx {
-  call: (cmd: string, args?: Record<string, unknown>) => Promise<unknown>;
-  outDir: string;
-  baselineDir: string;
-  updateBaselines: boolean;
-}
-
-async function runStage(stage: Stage, ctx: StageCtx): Promise<StageResult> {
-  const started = Date.now();
-  const label = stage.name;
-  const asserts: AssertResult[] = [];
+  const persist = (): void => {
+    try { fs.writeFileSync(path.join(cacheDir, 'run.json'), JSON.stringify(run, null, 2)); } catch { /* best-effort */ }
+    onProgress?.(run);
+  };
+  persist();
 
   try {
-    if (stage.init) await ctx.call('eval', { code: stage.init });
-
-    if (stage.screenshot) {
-      await ctx.call('setCamera', cameraArgs(stage.screenshot.camera));
-    }
-    if (stage.wait) await delay(stage.wait);
-
-    // Capture (if a screenshot is declared), then the pixel assert if a baseline is set.
-    if (stage.screenshot) {
-      const outName = stage.screenshot.out ?? `${slug(stage.name)}.png`;
-      const absOut = path.resolve(ctx.outDir, outName);
-      await fs.mkdir(path.dirname(absOut), { recursive: true });
-      await ctx.call('capture', { out: absOut });
-      if (!await waitForFile(absOut, 15_000)) {
-        throw new Error(`capture timeout: PNG not written at ${absOut}`);
+    for (let i = 0; i < descriptor.stages.length; i++) {
+      const stage = descriptor.stages[i];
+      const sr = run.stages[i];
+      sr.status = 'running';
+      persist();
+      const stageStart = Date.now();
+      const log = (line: string): void => { sr.log.push(line); persist(); };
+      try {
+        log(`stage: ${stage.name}`);
+        const { screenshot, asserts } = await runStage(stage, i, descriptor, cacheDir, descriptorDir, log);
+        sr.screenshot = screenshot;
+        sr.asserts = asserts;
+        sr.status = asserts.some((a) => !a.passed) ? 'failed' : 'done';
+        sr.ms = Date.now() - stageStart;
+      } catch (err) {
+        sr.status = 'failed';
+        sr.ms = Date.now() - stageStart;
+        sr.error = (err as Error).message;
+        sr.log.push(`ERROR ${sr.error}`);
       }
-      if (stage.screenshot.baseline) {
-        asserts.push(await pixelAssert(stage.screenshot.baseline, absOut, stage.screenshot.tolerance ?? 0, ctx));
+      persist();
+    }
+    run.status = run.stages.some((s) => s.status === 'failed') ? 'failed' : 'done';
+  } catch (err) {
+    run.status = 'failed';
+    for (const sr of run.stages) {
+      if (sr.status === 'queued' || sr.status === 'running') {
+        sr.status = 'failed';
+        if (!sr.log.length) sr.log.push((err as Error).message);
       }
     }
-
-    if (stage.assert) asserts.push(...await stateAsserts(stage.assert, ctx));
-  } catch (err) {
-    const result: StageResult = {
-      name: label, status: 'error', asserts,
-      durationMs: Date.now() - started, error: (err as Error).message,
-    };
-    console.log(pc.red(`[gtest] ✗ ${label}: ${result.error}`));
-    return result;
+  } finally {
+    run.finishedAt = new Date().toISOString();
+    persist();
+    teardown();
   }
 
-  const status: StageResult['status'] =
-    asserts.some((a) => a.status === 'error') ? 'error'
-    : asserts.some((a) => a.status === 'fail') ? 'fail'
-    : 'pass';
-  const glyph = status === 'pass' ? pc.green('✓') : pc.red('✗');
-  console.log(`[gtest] ${glyph} ${label}${asserts.length ? ` (${asserts.filter((a) => a.status === 'pass').length}/${asserts.length} asserts)` : ''}`);
-  return { name: label, status, asserts, durationMs: Date.now() - started };
+  return run;
 }
 
-async function pixelAssert(baselineRel: string, actualAbs: string, tolerance: number, ctx: StageCtx): Promise<AssertResult> {
-  const baselineAbs = path.resolve(ctx.baselineDir, baselineRel);
-  const label = `pixel ${baselineRel}`;
-  if (ctx.updateBaselines) {
-    await fs.mkdir(path.dirname(baselineAbs), { recursive: true });
-    await fs.copyFile(actualAbs, baselineAbs);
-    return { label, status: 'pass', detail: 'baseline updated' };
-  }
-  const outcome = await comparePixels(actualAbs, baselineAbs, tolerance);
-  return { label, status: outcome.pass ? 'pass' : 'fail', detail: outcome.detail };
+/** Kill any in-flight gtest children (called on daemon shutdown). */
+export function killActiveGtest(): void {
+  teardown();
 }
 
-async function stateAsserts(a: StageAssert, ctx: StageCtx): Promise<AssertResult[]> {
-  const out: AssertResult[] = [];
-
-  if (a.sceneLoaded !== undefined) {
-    out.push(await stateCheck(`sceneLoaded == ${a.sceneLoaded}`, ctx, 'status', {}, 'sceneLoaded', a.sceneLoaded));
-  }
-  if (a.entityCount !== undefined) {
-    out.push(await stateCheck(`entityCount == ${a.entityCount}`, ctx, 'status', {}, 'entityCount', a.entityCount));
-  }
-  for (const id of a.entities ?? []) {
-    out.push(await existsCheck(`entity ${id} exists`, ctx, 'getEntity', { id }, undefined, true));
-  }
-  for (const s of a.state ?? []) {
-    const label = `${s.query}${s.path ? `.${s.path}` : ''} ${'equals' in s ? `== ${JSON.stringify(s.equals)}` : `exists ${s.exists}`}`;
-    if ('exists' in s && s.exists !== undefined) {
-      out.push(await existsCheck(label, ctx, s.query, s.args ?? {}, s.path, s.exists));
-    } else {
-      out.push(await stateCheck(label, ctx, s.query, s.args ?? {}, s.path, s.equals));
-    }
-  }
-  return out;
-}
-
-async function stateCheck(
-  label: string, ctx: StageCtx, cmd: string, args: Record<string, unknown>,
-  jsonPath: string | undefined, expected: unknown,
-): Promise<AssertResult> {
-  try {
-    const actual = getPath(await ctx.call(cmd, args), jsonPath);
-    return valuesEqual(actual, expected)
-      ? { label, status: 'pass', expected, actual }
-      : { label, status: 'fail', expected, actual, detail: 'value mismatch' };
-  } catch (err) {
-    return { label, status: 'error', detail: daemonCmdError(cmd, err) };
-  }
-}
-
-async function existsCheck(
-  label: string, ctx: StageCtx, cmd: string, args: Record<string, unknown>,
-  jsonPath: string | undefined, wantExists: boolean,
-): Promise<AssertResult> {
-  try {
-    const value = getPath(await ctx.call(cmd, args), jsonPath);
-    const present = value !== null && value !== undefined;
-    return present === wantExists
-      ? { label, status: 'pass', actual: present }
-      : { label, status: 'fail', expected: wantExists, actual: present, detail: 'presence mismatch' };
-  } catch (err) {
-    return { label, status: 'error', detail: daemonCmdError(cmd, err) };
-  }
-}
-
-function daemonCmdError(cmd: string, err: unknown): string {
-  const msg = (err as Error).message;
-  return `daemon cmd "${cmd}" failed: ${msg} (the iris StorybookDaemon may not yet implement it — see PRD-001)`;
-}
-
-/** Map the .gtest camera (posX/rotX/fov) to the StorybookDaemon setCamera (x/rx/fov). */
-function cameraArgs(c: Camera): Record<string, unknown> {
-  const args: Record<string, unknown> = { x: c.posX, y: c.posY, z: c.posZ };
-  if (c.rotX !== undefined) args.rx = c.rotX;
-  if (c.rotY !== undefined) args.ry = c.rotY;
-  if (c.rotZ !== undefined) args.rz = c.rotZ;
-  if (c.fov !== undefined) args.fov = c.fov;
-  return args;
-}
-
-function slug(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'stage';
-}
-
-async function waitForFile(absPath: string, timeoutMs: number): Promise<boolean> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const stat = await fs.stat(absPath);
-      if (stat.size > 0) return true;
-    } catch { /* not yet */ }
-    await delay(200);
-  }
-  return false;
+function teardown(): void {
+  if (activeClient) { try { activeClient.disconnect(); } catch { /* ignore */ } activeClient = null; }
+  for (const child of activeChildren) { try { child.kill(); } catch { /* ignore */ } }
+  activeChildren.clear();
+  runningKey = null;
 }

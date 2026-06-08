@@ -1,93 +1,59 @@
 import { describe, it, expect } from 'vitest';
-import { parseGTest, GTestParseError } from '../src/gtest/schema.js';
+import { parseDescriptor, GtestParseError } from '../src/gtest/schema.js';
 
-const MINIMAL = `
+const FULL = `
 kind: "gtest/1"
-name: smoke
+name: snake-e2e
+scene: "../iris.xml"
+server: "http://127.0.0.1:8080"
+db: "./world.db"
 stages:
   - name: Start
-    wait: 100
-    screenshot:
-      camera: { posX: 0, posY: 4, posZ: 0.01, rotX: -90, fov: 55 }
-`;
-
-const WITH_ASSERTS = `
-kind: "gtest/1"
-name: asserted
-scene: "../iris.xml"
-stages:
-  - name: Board
     init: "App.dispatch('start')"
     wait: 500
     screenshot:
-      out: board.png
-      camera: { posX: 0, posY: 6, posZ: 0.01, rotX: -90 }
-      baseline: baselines/board.png
-      tolerance: 0.02
+      camera: { posX: 0, posY: 6, posZ: 0.01, rotX: -90, fov: 45 }
+      size: { width: 640, height: 480 }
+    setup:
+      server:
+        - { method: POST, path: /reset }
     assert:
-      sceneLoaded: true
-      entityCount: 12
-      entities: [PlayerSpawn, Board]
-      state:
-        - { query: getEntity, args: { id: Snake }, path: transform.position.x, equals: 0 }
+      db:
+        - { table: score, column: value, where: "id=1", op: eq, value: 0 }
+      server:
+        - { path: /state, field: phase, op: eq, value: playing }
 `;
 
-describe('parseGTest', () => {
-  it('parses a minimal screenshot-only suite (the in-the-wild shape)', () => {
-    const g = parseGTest(MINIMAL, '/tmp/smoke.gtest');
-    expect(g.kind).toBe('gtest/1');
-    expect(g.name).toBe('smoke');
-    expect(g.stages).toHaveLength(1);
-    expect(g.stages[0].wait).toBe(100);
-    expect(g.stages[0].screenshot?.camera).toMatchObject({ posX: 0, posY: 4, rotX: -90, fov: 55 });
-    expect(g.stages[0].assert).toBeUndefined();
-  });
-
-  it('parses engine-state + pixel asserts', () => {
-    const g = parseGTest(WITH_ASSERTS, '/tmp/a.gtest');
-    expect(g.scene).toBe('../iris.xml');
-    const s = g.stages[0];
+describe('parseDescriptor', () => {
+  it('parses a full E2E descriptor', () => {
+    const d = parseDescriptor(FULL);
+    expect(d.kind).toBe('gtest/1');
+    expect(d.server).toBe('http://127.0.0.1:8080');
+    expect(d.db).toBe('./world.db');
+    expect(d.stages).toHaveLength(1);
+    const s = d.stages[0];
     expect(s.init).toBe("App.dispatch('start')");
-    expect(s.screenshot?.baseline).toBe('baselines/board.png');
-    expect(s.screenshot?.tolerance).toBe(0.02);
-    expect(s.assert?.sceneLoaded).toBe(true);
-    expect(s.assert?.entityCount).toBe(12);
-    expect(s.assert?.entities).toEqual(['PlayerSpawn', 'Board']);
-    expect(s.assert?.state?.[0]).toMatchObject({ query: 'getEntity', path: 'transform.position.x', equals: 0 });
+    expect(s.screenshot?.camera.posY).toBe(6);
+    expect(s.setup?.server?.[0]).toMatchObject({ method: 'POST', path: '/reset' });
+    expect(s.assert?.db?.[0]).toMatchObject({ table: 'score', column: 'value', op: 'eq', value: 0 });
+    expect(s.assert?.server?.[0]).toMatchObject({ path: '/state', field: 'phase', op: 'eq', value: 'playing' });
   });
 
-  it('rejects a non-gtest kind', () => {
-    expect(() => parseGTest('kind: "flow/1"\nname: x\nstages: [{name: a}]', '/tmp/x.gtest'))
-      .toThrowError(GTestParseError);
+  it('parses a minimal screenshot-only stage (the snake.gtest shape)', () => {
+    const d = parseDescriptor(`kind: "gtest/1"\nname: smoke\nstages:\n  - name: s\n    wait: 100\n    screenshot:\n      camera: { posX: 0, posY: 4, posZ: 0.01, rotX: -90, fov: 55 }`);
+    expect(d.stages[0].assert).toBeUndefined();
+    expect(d.stages[0].screenshot?.camera.fov).toBe(55);
   });
 
   it('rejects an empty stages list', () => {
-    expect(() => parseGTest('kind: "gtest/1"\nname: x\nstages: []', '/tmp/x.gtest'))
-      .toThrowError(/non-empty/);
+    expect(() => parseDescriptor('kind: "gtest/1"\nname: x\nstages: []')).toThrowError(GtestParseError);
   });
 
   it('rejects a stage without a name', () => {
-    expect(() => parseGTest('kind: "gtest/1"\nname: x\nstages:\n  - wait: 1', '/tmp/x.gtest'))
-      .toThrowError(/stage.name/);
+    expect(() => parseDescriptor('kind: "gtest/1"\nname: x\nstages:\n  - wait: 1')).toThrowError(/missing "name"/);
   });
 
-  it('rejects an out-of-range tolerance', () => {
-    const bad = 'kind: "gtest/1"\nname: x\nstages:\n  - name: a\n    screenshot:\n      camera: { posX: 0, posY: 0, posZ: 0 }\n      baseline: b.png\n      tolerance: 5';
-    expect(() => parseGTest(bad, '/tmp/x.gtest')).toThrowError(/tolerance/);
-  });
-
-  it('requires equals or exists on a state assert', () => {
-    const bad = 'kind: "gtest/1"\nname: x\nstages:\n  - name: a\n    assert:\n      state:\n        - { query: getEntity }';
-    expect(() => parseGTest(bad, '/tmp/x.gtest')).toThrowError(/equals.*exists|exists.*equals/);
-  });
-
-  it('reports the source line on error', () => {
-    try {
-      parseGTest('kind: "gtest/1"\nname: x\nstages:\n  - name: a\n    wait: -5', '/tmp/x.gtest');
-      expect.unreachable();
-    } catch (e) {
-      expect(e).toBeInstanceOf(GTestParseError);
-      expect((e as GTestParseError).line).toBe(4);
-    }
+  it('rejects invalid YAML', () => {
+    expect(() => parseDescriptor('kind: "gtest/1"\n  : : :')).toThrowError(GtestParseError);
   });
 });

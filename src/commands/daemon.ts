@@ -11,7 +11,9 @@ import pc from 'picocolors';
 import { startDaemonServer } from '../daemon/server.js';
 import { VERSION } from '../version.js';
 
-const DEFAULT_PORT = '9100';
+// Control-plane port. Distinct from the container's child-daemon ports:
+// iris-player sidecar 9100, preview 9200, shots 9300, flow 9400, gtest-preview 9500.
+const DEFAULT_PORT = '9099';
 
 interface DaemonOptions {
   host: string;

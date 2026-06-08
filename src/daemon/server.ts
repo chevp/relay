@@ -15,10 +15,10 @@
  *   shutdown   → { ok }                      (reaps children, closes the server)
  */
 
+import path from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { ProcessRegistry } from './registry.js';
-import { runGTest } from '../gtest/runner.js';
-import { resolvePlayerPath } from './playerPath.js';
+import { runGtest, killActiveGtest } from '../gtest/runner.js';
 import { VERSION } from '../version.js';
 
 export interface DaemonOptions {
@@ -39,7 +39,7 @@ interface Envelope { id?: string; cmd?: string; args?: Record<string, unknown>; 
 export async function startDaemonServer(opts: DaemonOptions): Promise<DaemonServer> {
   const startedAtMs = Date.now();
   const registry = new ProcessRegistry();
-  const handlers = buildHandlers(registry, opts, startedAtMs);
+  const handlers = buildHandlers(registry, startedAtMs);
 
   const wss = new WebSocketServer({ host: opts.host ?? '127.0.0.1', port: opts.port });
 
@@ -53,6 +53,7 @@ export async function startDaemonServer(opts: DaemonOptions): Promise<DaemonServ
   });
 
   const close = async (): Promise<void> => {
+    killActiveGtest();
     registry.killAll();
     for (const client of wss.clients) { try { client.close(); } catch { /* ignore */ } }
     await new Promise<void>((resolve) => wss.close(() => resolve()));
@@ -61,9 +62,11 @@ export async function startDaemonServer(opts: DaemonOptions): Promise<DaemonServ
   return { port: opts.port, registry, close };
 }
 
-type Handler = (args: Record<string, unknown>) => Promise<unknown> | unknown;
+/** Handlers may push intermediate `{type,...}` frames (no id) before resolving. */
+type Push = (event: Record<string, unknown>) => void;
+type Handler = (args: Record<string, unknown>, push: Push) => Promise<unknown> | unknown;
 
-function buildHandlers(registry: ProcessRegistry, opts: DaemonOptions, startedAtMs: number): Map<string, Handler> {
+function buildHandlers(registry: ProcessRegistry, startedAtMs: number): Map<string, Handler> {
   const m = new Map<string, Handler>();
 
   m.set('ping', () => ({
@@ -80,17 +83,13 @@ function buildHandlers(registry: ProcessRegistry, opts: DaemonOptions, startedAt
     return { killed: registry.kill(id) };
   });
 
-  m.set('gtest.run', async (args) => {
+  m.set('gtest.run', async (args, push) => {
     const file = args.file;
     if (typeof file !== 'string' || !file) throw new Error('gtest.run requires args.file');
-    return runGTest({
-      gtestPath: file,
-      playerPath: resolvePlayerPath(typeof args.player === 'string' ? args.player : undefined),
-      port: typeof args.port === 'number' ? args.port : (opts.defaultGtestPort ?? 9876),
-      outDir: typeof args.out === 'string' ? args.out : undefined,
-      baselineDir: typeof args.baselineDir === 'string' ? args.baselineDir : undefined,
-      updateBaselines: args.updateBaselines === true,
-    });
+    const workspace = typeof args.workspace === 'string' ? args.workspace : path.dirname(file);
+    // Stream live per-stage progress so clients (the container UI) update as the
+    // run advances, then return the final run as the call result.
+    return runGtest(file, workspace, (run) => push({ type: 'gtest.progress', run }));
   });
 
   // `shutdown` is handled in dispatch (it must reply before tearing down).
@@ -121,8 +120,11 @@ async function dispatch(ws: WebSocket, raw: string, handlers: Map<string, Handle
 
   const handler = handlers.get(cmd);
   if (!handler) { reply({ ok: false, error: `unknown cmd: ${cmd}` }); return; }
+  const push: Push = (event) => {
+    if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(event));
+  };
   try {
-    const result = await handler(msg.args ?? {});
+    const result = await handler(msg.args ?? {}, push);
     reply({ ok: true, result });
   } catch (err) {
     reply({ ok: false, error: (err as Error).message });

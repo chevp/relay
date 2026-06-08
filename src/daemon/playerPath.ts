@@ -1,34 +1,39 @@
 /**
- * Resolve the iris-player binary path for daemon-driven runs (gtest, scenarios).
+ * Resolve iris binary paths for daemon-driven runs (gtest, scenarios).
  *
- * Order: explicit arg → $IRIS_PLAYER / $NUNA_PLAYER → common build locations
- * walked up from the cwd. The returned path is not existence-checked here — the
- * caller decides how to report a miss (so it can print the resolved path).
+ * Order: explicit arg → $IRIS_<NAME> / env → common build locations walked up
+ * from the cwd. The returned path is not existence-checked here — the caller
+ * decides how to report a miss (so it can print the resolved path).
  */
 
 import path from 'node:path';
 import { existsSync } from 'node:fs';
 
-const BIN = process.platform === 'win32' ? 'iris-player.exe' : 'iris-player';
+const EXE = process.platform === 'win32' ? '.exe' : '';
 
-/** Build-output subpaths to probe under each ancestor directory. */
-const CANDIDATES = [
-  ['runtime', 'iris', 'build', 'bin', 'Release', BIN],
-  ['runtime', 'iris', 'build', 'bin', BIN],
-  ['build', 'bin', 'Release', BIN],
-  ['build', 'bin', BIN],
+/** Build-output subdirs to probe under each ancestor directory. */
+const BUILD_DIRS = [
+  ['runtime', 'iris', 'build', 'bin', 'Release'],
+  ['runtime', 'iris', 'build', 'bin'],
+  ['build', 'bin', 'Release'],
+  ['build', 'bin'],
 ];
 
-export function resolvePlayerPath(explicit?: string): string {
+/**
+ * Resolve an iris binary by base name (e.g. `iris-player`, `iris-preview`).
+ * `envVar` overrides the default `$IRIS_<NAME>` lookup.
+ */
+export function resolveIrisBinary(name: string, explicit?: string, envVar?: string): string {
   if (explicit) return path.resolve(explicit);
 
-  const env = process.env.IRIS_PLAYER ?? process.env.NUNA_PLAYER;
+  const env = process.env[envVar ?? `IRIS_${name.replace(/-/g, '_').toUpperCase()}`];
   if (env) return path.resolve(env);
 
+  const file = `${name}${EXE}`;
   let dir = process.cwd();
   while (true) {
-    for (const parts of CANDIDATES) {
-      const candidate = path.join(dir, ...parts);
+    for (const parts of BUILD_DIRS) {
+      const candidate = path.join(dir, ...parts, file);
       if (existsSync(candidate)) return candidate;
     }
     const parent = path.dirname(dir);
@@ -36,5 +41,15 @@ export function resolvePlayerPath(explicit?: string): string {
     dir = parent;
   }
   // Fall back to a conventional location so the caller can report a clear miss.
-  return path.join(process.cwd(), ...CANDIDATES[0]);
+  return path.join(process.cwd(), ...BUILD_DIRS[0], file);
+}
+
+/** Convenience for the iris-player daemon (scenario runner, etc.). */
+export function resolvePlayerPath(explicit?: string): string {
+  return resolveIrisBinary('iris-player', explicit, 'IRIS_PLAYER');
+}
+
+/** Convenience for iris-preview (gtest / shots / atlas render pipelines). */
+export function resolvePreviewPath(explicit?: string): string {
+  return resolveIrisBinary('iris-preview', explicit, 'IRIS_PREVIEW');
 }

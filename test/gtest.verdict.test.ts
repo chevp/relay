@@ -1,68 +1,34 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { promises as fs } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-import { getPath, valuesEqual, comparePixels } from '../src/gtest/verdict.js';
+import { describe, it, expect } from 'vitest';
+import { applyOp, getNestedField } from '../src/gtest/verdict.js';
 
-describe('getPath', () => {
-  it('resolves a dotted path', () => {
-    expect(getPath({ a: { b: { c: 7 } } }, 'a.b.c')).toBe(7);
+describe('applyOp', () => {
+  it('eq / ne compare as strings', () => {
+    expect(applyOp('eq', 5, 5)).toBe(true);
+    expect(applyOp('eq', '5', 5)).toBe(true);
+    expect(applyOp('ne', 5, 6)).toBe(true);
   });
-  it('returns the whole object for an empty path', () => {
-    const o = { x: 1 };
-    expect(getPath(o, undefined)).toBe(o);
+  it('numeric comparators coerce', () => {
+    expect(applyOp('lt', 3, 5)).toBe(true);
+    expect(applyOp('lte', 5, 5)).toBe(true);
+    expect(applyOp('gt', 9, 5)).toBe(true);
+    expect(applyOp('gte', 5, 9)).toBe(false);
   });
-  it('returns undefined when a hop is missing', () => {
-    expect(getPath({ a: 1 }, 'a.b.c')).toBeUndefined();
+  it('contains does substring', () => {
+    expect(applyOp('contains', 'playing now', 'play')).toBe(true);
+    expect(applyOp('contains', 'idle', 'play')).toBe(false);
+  });
+  it('exists checks presence', () => {
+    expect(applyOp('exists', 0, undefined)).toBe(true);
+    expect(applyOp('exists', null, undefined)).toBe(false);
+    expect(applyOp('exists', undefined, undefined)).toBe(false);
   });
 });
 
-describe('valuesEqual', () => {
-  it('compares primitives', () => {
-    expect(valuesEqual(12, 12)).toBe(true);
-    expect(valuesEqual(12, 13)).toBe(false);
-    expect(valuesEqual(true, true)).toBe(true);
+describe('getNestedField', () => {
+  it('resolves dotted paths', () => {
+    expect(getNestedField({ a: { b: { c: 7 } } }, 'a.b.c')).toBe(7);
   });
-  it('compares nested structures', () => {
-    expect(valuesEqual({ p: { x: 0, y: 5 } }, { p: { x: 0, y: 5 } })).toBe(true);
-    expect(valuesEqual([1, 2, 3], [1, 2, 3])).toBe(true);
-    expect(valuesEqual({ a: 1 }, { a: 1, b: 2 })).toBe(false);
-  });
-});
-
-describe('comparePixels (exact)', () => {
-  let dir: string;
-  beforeAll(async () => {
-    dir = await fs.mkdtemp(path.join(os.tmpdir(), 'gtest-px-'));
-  });
-  afterAll(async () => {
-    await fs.rm(dir, { recursive: true, force: true });
-  });
-
-  it('passes on identical bytes', async () => {
-    const a = path.join(dir, 'a.png');
-    const b = path.join(dir, 'b.png');
-    await fs.writeFile(a, Buffer.from([1, 2, 3, 4]));
-    await fs.writeFile(b, Buffer.from([1, 2, 3, 4]));
-    const r = await comparePixels(a, b, 0);
-    expect(r.pass).toBe(true);
-  });
-
-  it('fails on differing bytes', async () => {
-    const a = path.join(dir, 'a2.png');
-    const b = path.join(dir, 'b2.png');
-    await fs.writeFile(a, Buffer.from([1, 2, 3, 4]));
-    await fs.writeFile(b, Buffer.from([9, 9, 9, 9]));
-    const r = await comparePixels(a, b, 0);
-    expect(r.pass).toBe(false);
-    expect(r.detail).toMatch(/mismatch/);
-  });
-
-  it('fails clearly when the baseline is missing', async () => {
-    const a = path.join(dir, 'a3.png');
-    await fs.writeFile(a, Buffer.from([1]));
-    const r = await comparePixels(a, path.join(dir, 'nope.png'), 0);
-    expect(r.pass).toBe(false);
-    expect(r.detail).toMatch(/baseline not found/);
+  it('returns undefined on a missing hop', () => {
+    expect(getNestedField({ a: 1 }, 'a.b')).toBeUndefined();
   });
 });
