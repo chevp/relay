@@ -53,6 +53,9 @@ function readDescriptor(descriptorPath: string): FlowDescriptor {
     if (!Array.isArray(job.steps) || job.steps.length === 0) {
       throw new Error(`job "${job.id}" needs a non-empty "steps" list`);
     }
+    // Normalize a scalar `needs: x` (common in authored flows) to a list, so
+    // topoOrder doesn't iterate the string char-by-char.
+    if (typeof job.needs === 'string') job.needs = [job.needs];
   }
   return parsed;
 }

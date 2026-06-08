@@ -294,7 +294,7 @@ export async function runGtest(
 
   const run: GtestRun = {
     descriptor: descriptorPath,
-    name: descriptor.name ?? path.basename(descriptorPath, '.gtest'),
+    name: descriptor.name ?? path.basename(descriptorPath).replace(/\.(scenario|gtest)$/i, ''),
     startedAt: new Date().toISOString(),
     status: 'running',
     stages: descriptor.stages.map<GtestStageResult>((s) => ({ name: s.name, status: 'queued', asserts: [], log: [] })),
