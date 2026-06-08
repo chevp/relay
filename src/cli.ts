@@ -24,6 +24,8 @@ import { registerPack } from './commands/pack.js';
 import { registerValidate } from './commands/validate.js';
 import { registerMcp } from './commands/mcp.js';
 import { registerStory } from './commands/story.js';
+import { registerGtest } from './commands/gtest.js';
+import { registerDaemon } from './commands/daemon.js';
 
 async function main(): Promise<void> {
   const program = new Command();
@@ -41,6 +43,8 @@ async function main(): Promise<void> {
   registerValidate(program);
   registerMcp(program);
   registerStory(program);
+  registerGtest(program);
+  registerDaemon(program);
 
   await program.parseAsync(process.argv);
 }
