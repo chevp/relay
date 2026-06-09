@@ -20,6 +20,10 @@ import type { AtlasDescriptor, AtlasLayout, AtlasOutput, AtlasRun, AtlasView, Sh
 
 const ATLAS_PORT = 9700;
 const SETTLE_MS = 600;
+// IBL cubemap convolution (irradiance + prefiltered mip chain) runs on the GPU
+// after the WebSocket connects. Capturing before it completes produces a dark,
+// IBL-free frame. This one-time warmup fires after connection, before any view.
+const IBL_WARMUP_MS = 1200;
 const FRAME_TIMEOUT_MS = 8_000;
 const CONNECT_TIMEOUT_MS = 40_000;
 const DEFAULT_CELL = 256;
@@ -207,6 +211,9 @@ export async function runAtlas(
       onExitReject = reject;
       waitConnected(client, CONNECT_TIMEOUT_MS).then(resolve, reject);
     }).finally(() => { onExitReject = null; });
+
+    // Wait for IBL cubemap convolution to finish before capturing any views.
+    await wait(IBL_WARMUP_MS);
 
     for (let i = 0; i < descriptor.views.length; i++) {
       const spec = descriptor.views[i];

@@ -19,6 +19,7 @@ import type { ShotsDescriptor, ShotsRun, ShotResult, ShotsView, ViewSpec } from 
 
 const SHOTS_PORT = 9300;
 const SETTLE_MS = 600;
+const IBL_WARMUP_MS = 1200;
 const FRAME_TIMEOUT_MS = 8_000;
 const CONNECT_TIMEOUT_MS = 40_000;
 
@@ -160,6 +161,8 @@ export async function runShots(
       onExitReject = reject;
       waitConnected(client, CONNECT_TIMEOUT_MS).then(resolve, reject);
     }).finally(() => { onExitReject = null; });
+
+    await wait(IBL_WARMUP_MS);
 
     for (let i = 0; i < descriptor.views.length; i++) {
       const spec = descriptor.views[i];
