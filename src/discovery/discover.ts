@@ -24,6 +24,8 @@ export interface DiscoveryDocument {
   static: Record<string, DiscoveryStaticEntry>;
   servers: Record<string, DiscoveryServerEntry>;
   sources: Record<string, string>;
+  /** Filesystem path of the primary game root — set when relay is local. */
+  localPath?: string;
 }
 
 export function buildDiscovery(
@@ -46,10 +48,12 @@ export function buildDiscovery(
   for (const m of config.sources) {
     sources[m.alias] = m.ref;
   }
+  const primaryRoot = config.staticRoots.find((r) => r.alias === 'game') ?? config.staticRoots[0];
   return {
     nunaServe: { version, host: publicHost, port: config.port },
     static: staticEntries,
     servers,
     sources,
+    localPath: primaryRoot?.path,
   };
 }
