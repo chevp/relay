@@ -28,6 +28,7 @@ export interface ShotResult {
   ms?: number;
   file?: string;
   error?: string;
+  playerLog?: string[];
 }
 
 // ─── .shots ──────────────────────────────────────────────────────────────────

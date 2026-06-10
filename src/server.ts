@@ -14,20 +14,23 @@ import type { ServeConfig, StaticRoot } from './config/ServeConfig.js';
 import { buildManifest, type Manifest } from './manifest/ManifestBuilder.js';
 import { buildDiscovery } from './discovery/discover.js';
 
-// ui/overview.html sits next to dist/ when published, and next to src/ during
-// dev (tsx). Resolve once at import time so the route handler is cheap.
-const OVERVIEW_PATH = resolveOverviewPath();
-function resolveOverviewPath(): string {
+// Resolve a UI file path once at import time (dev: src/server.ts, prod: dist/server.js).
+function resolveUiPath(filename: string): string {
   const here = path.dirname(fileURLToPath(import.meta.url));
   const candidates = [
-    path.resolve(here, '..', 'ui', 'overview.html'),       // dist/server.js → ../ui
-    path.resolve(here, '..', '..', 'ui', 'overview.html'), // src/server.ts → ../../ui
+    path.resolve(here, '..', 'ui', filename),       // dist/server.js → ../ui
+    path.resolve(here, '..', '..', 'ui', filename), // src/server.ts → ../../ui
   ];
   for (const c of candidates) {
     if (existsSync(c)) return c;
   }
   return candidates[0];
 }
+
+// scene-explorer.html is the primary entry point (full-screen preview + overlay nav).
+// overview.html is still accessible at /overview for backward compat.
+const SCENE_EXPLORER_PATH = resolveUiPath('scene-explorer.html');
+const OVERVIEW_PATH        = resolveUiPath('overview.html');
 
 export interface ServerContext {
   config: ServeConfig;
@@ -58,9 +61,20 @@ export async function createServer(ctx: ServerContext): Promise<FastifyInstance>
     await registerStaticRoot(app, root, ctx);
   }
 
-  // Root → overview SPA (vanilla HTML, hits /discover.json + per-root
-  // manifest.json to render an explorer). Single-file, no build step.
+  // Root → scene-explorer: full-screen iris-preview canvas + overlay scene navigator.
   app.get('/', async (_req, reply) => {
+    try {
+      const html = await fs.readFile(SCENE_EXPLORER_PATH, 'utf8');
+      reply.header('Content-Type', 'text/html; charset=utf-8');
+      reply.header('Cache-Control', 'no-cache');
+      return html;
+    } catch {
+      return reply.code(500).send({ error: 'scene_explorer_unavailable', path: SCENE_EXPLORER_PATH });
+    }
+  });
+
+  // /overview — legacy relay explorer (file manifest browser, backward compat).
+  app.get('/overview', async (_req, reply) => {
     try {
       const html = await fs.readFile(OVERVIEW_PATH, 'utf8');
       reply.header('Content-Type', 'text/html; charset=utf-8');

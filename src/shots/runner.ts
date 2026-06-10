@@ -149,9 +149,22 @@ export async function runShots(
 
   let onExitReject: ((e: Error) => void) | null = null;
 
+  const allLogLines: string[] = [];
+  const stdoutBuf = { rem: '' };
+  const stderrBuf = { rem: '' };
+
+  const flushBuf = (buf: { rem: string }, data: Buffer): void => {
+    buf.rem += data.toString();
+    const parts = buf.rem.split('\n');
+    buf.rem = parts.pop() ?? '';
+    for (const line of parts) { if (line) allLogLines.push(line); }
+  };
+
   try {
-    const child = spawnPreview(scene, { port: SHOTS_PORT, fps: 4, width: descriptor.size?.width, height: descriptor.size?.height });
+    const child = spawnPreview(scene, { port: SHOTS_PORT, fps: 4, width: descriptor.size?.width, height: descriptor.size?.height, captureOutput: true });
     activeChild = child;
+    child.stdout?.on('data', (d: Buffer) => flushBuf(stdoutBuf, d));
+    child.stderr?.on('data', (d: Buffer) => flushBuf(stderrBuf, d));
     child.on('exit', (code) => {
       if (activeChild === child) activeChild = null;
       onExitReject?.(new Error(`iris-preview exited before rendering (code ${code ?? '?'}) — see iris-preview.log`));
@@ -170,6 +183,7 @@ export async function runShots(
       result.status = 'running';
       persist();
       const startedAt = Date.now();
+      const shotLogStart = allLogLines.length;
       try {
         await client.call('setCamera', {
           posX: spec.camera.posX, posY: spec.camera.posY, posZ: spec.camera.posZ,
@@ -188,6 +202,7 @@ export async function runShots(
         result.ms = Date.now() - startedAt;
         result.error = (err as Error).message;
       }
+      result.playerLog = allLogLines.slice(shotLogStart);
       persist();
     }
 

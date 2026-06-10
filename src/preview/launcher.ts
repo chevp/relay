@@ -21,6 +21,8 @@ export interface PreviewSpawnOptions {
   editMode?: boolean;
   /** Explicit iris-preview binary path (else resolved from build dirs / env). */
   previewPath?: string;
+  /** Pipe stdout/stderr so the caller can capture log lines. */
+  captureOutput?: boolean;
 }
 
 /** Resolve a folder to its entry XML, or pass a file path through unchanged. */
@@ -45,7 +47,8 @@ export function spawnPreview(scenePath: string, opts: PreviewSpawnOptions): Chil
   if (opts.height) args.push(`--height=${opts.height}`);
   if (opts.editMode) args.push('--edit-mode');
 
-  const child = spawn(resolvePreviewPath(opts.previewPath), args, { stdio: 'ignore' });
+  const child = spawn(resolvePreviewPath(opts.previewPath), args,
+    { stdio: opts.captureOutput ? ['ignore', 'pipe', 'pipe'] : 'ignore' });
   child.on('error', (err) => { console.error('failed to spawn iris-preview:', err); });
   return child;
 }
