@@ -9,11 +9,15 @@
  *       "worlds/main.world.xml": { "sha256": "...", "size": 1234 }
  *     }
  *   }
+ *
+ * Accepts a ContentProvider so the same logic works for local filesystem,
+ * Firebase Storage, S3, etc.
  */
 
-import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { hashFile } from './sha256.js';
+import { hashBuffer } from './sha256.js';
+import type { ContentProvider } from '../provider/ContentProvider.js';
+import { LocalContentProvider } from '../provider/LocalContentProvider.js';
 
 export interface ManifestEntry {
   sha256: string;
@@ -28,13 +32,18 @@ export interface Manifest {
 
 const MANIFEST_FILENAME = 'manifest.json';
 
+const defaultProvider = new LocalContentProvider();
+
 /**
  * Build a manifest for every file under rootPath (recursive).
  * Skips the manifest.json file itself and anything named starting with ".".
  */
-export async function buildManifest(rootPath: string): Promise<Manifest> {
+export async function buildManifest(
+  rootPath: string,
+  provider: ContentProvider = defaultProvider,
+): Promise<Manifest> {
   const files: Record<string, ManifestEntry> = {};
-  await walk(rootPath, rootPath, files);
+  await walk(rootPath, rootPath, files, provider);
   return {
     version: 1,
     generated: new Date().toISOString(),
@@ -45,26 +54,19 @@ export async function buildManifest(rootPath: string): Promise<Manifest> {
 async function walk(
   absDir: string,
   rootAbs: string,
-  out: Record<string, ManifestEntry>
+  out: Record<string, ManifestEntry>,
+  provider: ContentProvider,
 ): Promise<void> {
-  let entries;
-  try {
-    entries = await fs.readdir(absDir, { withFileTypes: true });
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return;
-    throw err;
-  }
+  const entries = await provider.list(absDir);
   for (const ent of entries) {
     if (ent.name.startsWith('.')) continue;
-    const full = path.join(absDir, ent.name);
-    if (ent.isDirectory()) {
-      await walk(full, rootAbs, out);
-    } else if (ent.isFile()) {
-      if (ent.name === MANIFEST_FILENAME && path.dirname(full) === rootAbs) continue;
-      const rel = path.relative(rootAbs, full).split(path.sep).join('/');
-      const stat = await fs.stat(full);
-      const sha256 = await hashFile(full);
-      out[rel] = { sha256, size: stat.size };
+    if (ent.isDirectory) {
+      await walk(ent.path, rootAbs, out, provider);
+    } else if (ent.isFile) {
+      if (ent.name === MANIFEST_FILENAME && path.dirname(ent.path) === rootAbs) continue;
+      const rel = path.relative(rootAbs, ent.path).split(path.sep).join('/');
+      const buf = await provider.readFile(ent.path);
+      out[rel] = { sha256: hashBuffer(buf), size: buf.byteLength };
     }
   }
 }

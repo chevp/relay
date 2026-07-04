@@ -27,6 +27,7 @@ import { checkRequiredServers } from '../discovery/connectivity.js';
 import { warnAuthoringFormats } from '../config/authoringCheck.js';
 import { createFileWatcher } from '../watch/fileWatcher.js';
 import type { Manifest } from '../manifest/ManifestBuilder.js';
+import { LocalContentProvider } from '../provider/LocalContentProvider.js';
 import { VERSION } from '../version.js';
 
 const DEFAULT_CONFIG_FILENAME = 'nuna-serve.xml';
@@ -106,12 +107,14 @@ export async function runServe(opts: ServeOptions): Promise<ServeResult> {
 
   const manifests = new Map<string, Manifest>();
   const publicHost = derivePublicHost(config.host);
+  const provider = new LocalContentProvider();
   const server = await createServer({
     config,
     version: VERSION,
     verbose: opts.verbose,
     manifests,
     publicHost,
+    provider,
   });
 
   let address: string;
@@ -122,7 +125,7 @@ export async function runServe(opts: ServeOptions): Promise<ServeResult> {
   }
 
   if (opts.watch) {
-    createFileWatcher(config.staticRoots, manifests);
+    createFileWatcher(config.staticRoots, manifests, provider);
     console.log(pc.dim('  [watch] watching static roots for changes'));
   }
 

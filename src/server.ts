@@ -13,6 +13,10 @@ import pc from 'picocolors';
 import type { ServeConfig, StaticRoot } from './config/ServeConfig.js';
 import { buildManifest, type Manifest } from './manifest/ManifestBuilder.js';
 import { buildDiscovery } from './discovery/discover.js';
+import type { ContentProvider } from './provider/ContentProvider.js';
+import { LocalContentProvider } from './provider/LocalContentProvider.js';
+
+const localProvider = new LocalContentProvider();
 
 // Resolve a UI file path once at import time (dev: src/server.ts, prod: dist/server.js).
 function resolveUiPath(filename: string): string {
@@ -40,9 +44,12 @@ export interface ServerContext {
   manifests: Map<string, Manifest>;
   /** Hostname used when publishing URLs (e.g. localhost) */
   publicHost: string;
+  /** Content backend — defaults to local filesystem */
+  provider?: ContentProvider;
 }
 
 export async function createServer(ctx: ServerContext): Promise<FastifyInstance> {
+  const provider = ctx.provider ?? localProvider;
   const app = Fastify({
     logger: ctx.verbose
       ? { level: 'info', transport: { target: 'pino-pretty' } }
@@ -58,7 +65,7 @@ export async function createServer(ctx: ServerContext): Promise<FastifyInstance>
 
   // Register each static root as its own prefix.
   for (const root of ctx.config.staticRoots) {
-    await registerStaticRoot(app, root, ctx);
+    await registerStaticRoot(app, root, ctx, provider);
   }
 
   // Root → scene-explorer: full-screen iris-preview canvas + overlay scene navigator.
@@ -111,9 +118,10 @@ export async function createServer(ctx: ServerContext): Promise<FastifyInstance>
 async function registerStaticRoot(
   app: FastifyInstance,
   root: StaticRoot,
-  ctx: ServerContext
+  ctx: ServerContext,
+  provider: ContentProvider,
 ): Promise<void> {
-  const exists = await pathExists(root.path);
+  const exists = await provider.exists(root.path);
   if (!exists) {
     if (root.optional) {
       app.log?.warn?.(`[nuna serve] optional static root "${root.alias}" missing: ${root.path}`);
@@ -128,7 +136,7 @@ async function registerStaticRoot(
     reply.header('Cache-Control', 'no-cache');
     const cached = ctx.manifests.get(root.alias);
     if (cached) return cached;
-    const fresh = await buildManifest(root.path);
+    const fresh = await buildManifest(root.path, provider);
     ctx.manifests.set(root.alias, fresh);
     return fresh;
   });
@@ -196,15 +204,6 @@ function buildAgentManifest(ctx: ServerContext): AgentManifest {
       "Entity assetRefs use 'asset://<path>' which resolves against the iris.xml <asset-root>. " +
       'GLTF files are the actual 3D models; you can fetch them as binary. No write endpoints exist — edits go through normal filesystem tools.',
   };
-}
-
-async function pathExists(p: string): Promise<boolean> {
-  try {
-    await fs.access(p);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 function logRequest(req: FastifyRequest, reply: FastifyReply): void {

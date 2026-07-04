@@ -2,7 +2,7 @@
  * Process registry / supervisor for the relay daemon.
  *
  * The daemon (dockerd analogue) does not run engine work itself — it spawns and
- * tracks child processes (iris-player / iris-preview / irisproc) and can reap
+ * tracks child processes (iris-player / iris-preview) and can reap
  * them all on shutdown. This is the lightweight "shim table": one entry per
  * supervised child, with enough to report `ps` and tear down on exit.
  *
@@ -12,7 +12,7 @@
 
 import type { ChildProcess } from 'node:child_process';
 
-export type ChildKind = 'player' | 'preview' | 'irisproc' | 'other';
+export type ChildKind = 'player' | 'preview' | 'other';
 export type ChildStatus = 'running' | 'exited';
 
 export interface ChildInfo {

@@ -1,5 +1,5 @@
 /**
- * SHA-256 file hashing via node:crypto streams.
+ * SHA-256 hashing helpers via node:crypto.
  */
 
 import { createHash } from 'node:crypto';
@@ -13,4 +13,8 @@ export function hashFile(absPath: string): Promise<string> {
     stream.on('data', (chunk) => hash.update(chunk));
     stream.on('end', () => resolve(hash.digest('hex')));
   });
+}
+
+export function hashBuffer(buf: Buffer): string {
+  return createHash('sha256').update(buf).digest('hex');
 }
