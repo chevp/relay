@@ -4,7 +4,7 @@
  * This mirrors the canonical format owned by the kosmos container
  * (container/src/types.ts `GtestDescriptor` + container/src/gtest.ts), ported so
  * relay can run a `.gtest` headlessly. A `.gtest` is an end-to-end game-state
- * test: a flat list of `stages`, each booting iris-preview, optionally running
+ * test: a flat list of `stages`, each booting irisd, optionally running
  * setup (server HTTP / relay — relay deferred), capturing a screenshot, then
  * asserting against a SQLite DB and/or an authoritative server.
  *

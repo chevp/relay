@@ -1,7 +1,7 @@
 /**
  * `relay gtest <file.gtest>` — run a .gtest E2E suite headless.
  *
- * The automation entry point: no Electron. Boots iris-preview per stage, runs
+ * The automation entry point: no Electron. Boots irisd per stage, runs
  * setup + asserts (DB / server; relay deferred), writes the run to the shared
  * `.kosmos/gtest/<key>/` cache, and exits 0 when every stage passed, 1 otherwise.
  */
@@ -19,7 +19,7 @@ interface GtestOptions {
 export function registerGtest(program: Command): void {
   program
     .command('gtest <file.gtest>')
-    .description('Run a .gtest E2E suite headless (iris-preview + DB/server asserts)')
+    .description('Run a .gtest E2E suite headless (irisd + DB/server asserts)')
     .option('--workspace <dir>', 'Workspace root for the .kosmos cache (default: cwd)')
     .action(async (gtestPath: string, opts: GtestOptions) => {
       try {

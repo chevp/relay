@@ -1,7 +1,8 @@
 /**
- * Spawn iris-preview headless for relay-driven render/test pipelines.
+ * Spawn irisd (preview/stream mode) headless for relay-driven render/test
+ * pipelines.
  *
- * Mirrors the container's preview launcher but resolves the binary via relay's
+ * Mirrors the container's irisd launcher but resolves the binary via relay's
  * own iris-binary resolver (no Electron `app`). Not detached — the caller owns
  * the lifecycle and kills the child when done.
  */
@@ -19,7 +20,7 @@ export interface PreviewSpawnOptions {
   width?: number;
   height?: number;
   editMode?: boolean;
-  /** Explicit iris-preview binary path (else resolved from build dirs / env). */
+  /** Explicit irisd binary path (else resolved from build dirs / env). */
   previewPath?: string;
   /** Pipe stdout/stderr so the caller can capture log lines. */
   captureOutput?: boolean;
@@ -29,7 +30,7 @@ export interface PreviewSpawnOptions {
 export function resolveSceneInput(scenePath: string): string {
   let st;
   try { st = statSync(scenePath); }
-  catch { throw new Error(`iris-preview scene not found: ${scenePath}`); }
+  catch { throw new Error(`irisd scene not found: ${scenePath}`); }
   if (st.isFile()) return scenePath;
   for (const candidate of ENTRY_CANDIDATES) {
     const full = path.join(scenePath, candidate);
@@ -47,8 +48,13 @@ export function spawnPreview(scenePath: string, opts: PreviewSpawnOptions): Chil
   if (opts.height) args.push(`--height=${opts.height}`);
   if (opts.editMode) args.push('--edit-mode');
 
-  const child = spawn(resolvePreviewPath(opts.previewPath), args,
-    { stdio: opts.captureOutput ? ['ignore', 'pipe', 'pipe'] : 'ignore' });
-  child.on('error', (err) => { console.error('failed to spawn iris-preview:', err); });
+  const bin = resolvePreviewPath(opts.previewPath);
+  // irisd loads its extension/plugin DLLs (bin/Release/extensions/*) via a
+  // path relative to cwd — inheriting the caller's cwd breaks that lookup
+  // with STATUS_DLL_NOT_FOUND, so pin it to the binary's own directory
+  // (mirrors the container launcher: apps/container/src/launcher.ts).
+  const child = spawn(bin, args,
+    { cwd: path.dirname(bin), stdio: opts.captureOutput ? ['ignore', 'pipe', 'pipe'] : 'ignore' });
+  child.on('error', (err) => { console.error('failed to spawn irisd:', err); });
   return child;
 }

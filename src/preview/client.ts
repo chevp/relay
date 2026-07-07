@@ -1,7 +1,7 @@
 /**
- * WebSocket client to the iris-preview daemon (PreviewDaemon.cpp).
+ * WebSocket client to irisd's preview/stream daemon (PreviewDaemon.cpp).
  *
- * Ported from the container's preview client so relay can drive iris-preview
+ * Ported from the container's preview client so relay can drive irisd
  * headlessly (gtest screenshots, render pipelines) without the Electron shell.
  *
  * Two inbound frame kinds share one connection:

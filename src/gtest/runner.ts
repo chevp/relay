@@ -2,7 +2,7 @@
  * `.gtest` runner — end-to-end game-state tests, headless, in relay.
  *
  * Ported from the kosmos container (container/src/gtest.ts) so test runs no
- * longer require the Electron shell. Each stage boots iris-preview headlessly,
+ * longer require the Electron shell. Each stage boots irisd headlessly,
  * runs server setup, executes the stage `init` snippet, positions the camera,
  * settles, captures a JPEG, then checks DB (SQLite) and server (HTTP)
  * assertions. relay setup/assertions need a live connected player and are
@@ -129,7 +129,7 @@ async function runServerSetup(
   }
 }
 
-// ── iris-preview helpers ──────────────────────────────────────────────────────
+// ── irisd helpers ──────────────────────────────────────────────────────
 
 function nextFrame(client: PreviewClient, timeoutMs: number): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -147,7 +147,7 @@ function waitConnected(client: PreviewClient, timeoutMs: number, exited: () => E
   return new Promise((resolve, reject) => {
     const onConnected = (): void => { clearTimeout(timer); clearInterval(poll); client.off('connected', onConnected); resolve(); };
     const fail = (e: Error): void => { clearTimeout(timer); clearInterval(poll); client.off('connected', onConnected); reject(e); };
-    const timer = setTimeout(() => fail(new Error('iris-preview did not come up in time')), timeoutMs);
+    const timer = setTimeout(() => fail(new Error('irisd did not come up in time')), timeoutMs);
     const poll = setInterval(() => { const e = exited(); if (e) fail(e); }, 250);
     client.on('connected', onConnected);
   });
@@ -187,14 +187,14 @@ async function runStage(
   // ── screenshot ──
   let screenshot: string | undefined;
   if (stage.screenshot) {
-    log(`  boot iris-preview headless · ${path.basename(scenePath)}`);
+    log(`  boot irisd headless · ${path.basename(scenePath)}`);
     const size = stage.screenshot.size;
     const child = spawnPreview(scenePath, { port: GTEST_PREVIEW_PORT, fps: 4, width: size?.width, height: size?.height });
     activeChildren.add(child);
     let exited: Error | null = null;
     child.on('exit', (code) => {
       activeChildren.delete(child);
-      exited = new Error(`iris-preview exited (code ${code ?? '?'}) — check iris-preview.log`);
+      exited = new Error(`irisd exited (code ${code ?? '?'}) — check ~/.iris/logs/irisd.log`);
     });
 
     const client = new PreviewClient();

@@ -4,7 +4,7 @@
  * Ported from the kosmos container (container/src/preview/shots.ts) so render
  * runs no longer require the Electron shell. A `.shots` descriptor names a scene
  * + a list of named camera views; each is rendered headlessly through
- * iris-preview and written as `<view>.jpg` to the project-local
+ * irisd and written as `<view>.jpg` to the project-local
  * `.kosmos/renders/<key>/` cache, alongside a run.json — the same layout the
  * container reads via readShotsRun.
  */
@@ -95,7 +95,7 @@ function waitConnected(client: PreviewClient, timeoutMs: number): Promise<void> 
     const onConnected = (): void => { clearTimeout(timer); client.off('connected', onConnected); resolve(); };
     const timer = setTimeout(() => {
       client.off('connected', onConnected);
-      reject(new Error('iris-preview did not come up in time'));
+      reject(new Error('irisd did not come up in time'));
     }, timeoutMs);
     client.on('connected', onConnected);
   });
@@ -167,7 +167,7 @@ export async function runShots(
     child.stderr?.on('data', (d: Buffer) => flushBuf(stderrBuf, d));
     child.on('exit', (code) => {
       if (activeChild === child) activeChild = null;
-      onExitReject?.(new Error(`iris-preview exited before rendering (code ${code ?? '?'}) — see iris-preview.log`));
+      onExitReject?.(new Error(`irisd exited before rendering (code ${code ?? '?'}) — check ~/.iris/logs/irisd.log`));
     });
     client.connect(`ws://127.0.0.1:${SHOTS_PORT}`);
     await new Promise<void>((resolve, reject) => {

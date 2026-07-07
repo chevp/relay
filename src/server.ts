@@ -68,7 +68,7 @@ export async function createServer(ctx: ServerContext): Promise<FastifyInstance>
     await registerStaticRoot(app, root, ctx, provider);
   }
 
-  // Root → scene-explorer: full-screen iris-preview canvas + overlay scene navigator.
+  // Root → scene-explorer: full-screen irisd preview canvas + overlay scene navigator.
   app.get('/', async (_req, reply) => {
     try {
       const html = await fs.readFile(SCENE_EXPLORER_PATH, 'utf8');

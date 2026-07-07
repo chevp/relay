@@ -20,7 +20,7 @@ const BUILD_DIRS = [
 ];
 
 /**
- * Resolve an iris binary by base name (e.g. `iris-player`, `iris-preview`).
+ * Resolve an iris binary by base name (e.g. `iris-player`, `irisd`).
  * `envVar` overrides the default `$IRIS_<NAME>` lookup.
  */
 export function resolveIrisBinary(name: string, explicit?: string, envVar?: string): string {
@@ -49,7 +49,9 @@ export function resolvePlayerPath(explicit?: string): string {
   return resolveIrisBinary('iris-player', explicit, 'IRIS_PLAYER');
 }
 
-/** Convenience for iris-preview (gtest / shots / atlas render pipelines). */
+/** Convenience for irisd in preview/stream mode (gtest / shots / atlas render
+ *  pipelines) — irisd replaced the standalone iris-preview binary; the wire
+ *  protocol (PreviewDaemon) and CLI flags it accepts are unchanged. */
 export function resolvePreviewPath(explicit?: string): string {
-  return resolveIrisBinary('iris-preview', explicit, 'IRIS_PREVIEW');
+  return resolveIrisBinary('irisd', explicit, 'IRIS_PREVIEW');
 }

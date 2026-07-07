@@ -185,13 +185,13 @@ async function runIrisPreview(w: Record<string, unknown>, ctx: Ctx, log: (line: 
   activeClient = client;
   client.on('connected', () => { client.startStream({ fps: 4 }).catch(() => { /* best-effort */ }); });
 
-  log(`boot iris-preview · headless · ${path.basename(scene)}`);
+  log(`boot irisd · headless · ${path.basename(scene)}`);
   const child = spawnPreview(scene, { port: FLOW_PREVIEW_PORT, fps: 4, width: size?.width, height: size?.height });
   activeChildren.add(child);
   let exited: Error | null = null;
   child.on('exit', (code) => {
     activeChildren.delete(child);
-    exited = new Error(`iris-preview exited before rendering (code ${code ?? '?'}) — see iris-preview.log`);
+    exited = new Error(`irisd exited before rendering (code ${code ?? '?'}) — check ~/.iris/logs/irisd.log`);
   });
 
   try {
@@ -441,7 +441,7 @@ function waitConnected(client: PreviewClient, timeoutMs: number, exited: () => E
   return new Promise((resolve, reject) => {
     const onConnected = (): void => { clearTimeout(timer); clearInterval(poll); client.off('connected', onConnected); resolve(); };
     const fail = (e: Error): void => { clearTimeout(timer); clearInterval(poll); client.off('connected', onConnected); reject(e); };
-    const timer = setTimeout(() => fail(new Error('iris-preview did not come up in time')), timeoutMs);
+    const timer = setTimeout(() => fail(new Error('irisd did not come up in time')), timeoutMs);
     const poll = setInterval(() => { const e = exited(); if (e) fail(e); }, 250);
     client.on('connected', onConnected);
   });

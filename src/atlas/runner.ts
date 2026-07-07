@@ -2,15 +2,17 @@
  * `.atlas` sheet runner — headless, in relay.
  *
  * Ported from the kosmos container (container/src/atlas.ts). Renders each view
- * through iris-preview, then packs the frames into one `atlas.png` sprite-sheet.
+ * through irisd, then packs the frames into one `atlas.png` sprite-sheet.
  * The container composited with Electron's `nativeImage`; relay has no Electron,
  * so compositing uses jimp (pure JS — decode JPEG, resize, blit, encode PNG).
- * Output layout is unchanged: `.kosmos/atlas/<key>/` with `<view>.jpg`,
- * `atlas.png`, and run.json.
+ * Output layout: `.kosmos/atlas/<key>/` with one `<base62-id>.jpg` per view
+ * (the id is random, not the view name — cached output, so no name conflicts
+ * across `.atlas` files or across regenerations), `atlas.png`, and run.json.
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { randomBytes } from 'node:crypto';
 import { parse as parseYaml } from 'yaml';
 import { Jimp } from 'jimp';
 import type { ChildProcess } from 'node:child_process';
@@ -46,6 +48,17 @@ export function atlasKey(descriptorPath: string, workspaceRoot: string): string 
 
 export function atlasCacheDir(descriptorPath: string, workspaceRoot: string): string {
   return path.join(workspaceRoot, '.kosmos', 'atlas', atlasKey(descriptorPath, workspaceRoot));
+}
+
+const BASE62 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+
+/** A short random base62 id for a per-view frame filename — collision-safe
+ *  across `.atlas` files without encoding the view name (it's cached output). */
+function base62Id(len = 10): string {
+  const bytes = randomBytes(len);
+  let s = '';
+  for (let i = 0; i < len; i++) s += BASE62[bytes[i] % 62];
+  return s;
 }
 
 function readDescriptor(descriptorPath: string): AtlasDescriptor {
@@ -146,7 +159,7 @@ function waitConnected(client: PreviewClient, timeoutMs: number): Promise<void> 
     const onConnected = (): void => { clearTimeout(timer); client.off('connected', onConnected); resolve(); };
     const timer = setTimeout(() => {
       client.off('connected', onConnected);
-      reject(new Error('iris-preview did not come up in time'));
+      reject(new Error('irisd did not come up in time'));
     }, timeoutMs);
     client.on('connected', onConnected);
   });
@@ -174,6 +187,11 @@ export async function runAtlas(
   const descriptor = readDescriptor(descriptorPath);
   const cacheDir = atlasCacheDir(descriptorPath, workspaceRoot);
   fs.mkdirSync(cacheDir, { recursive: true });
+  // Frame filenames are random base62 ids (not the view name), so a re-run
+  // never overwrites in place — clear the previous run's frames first.
+  for (const f of fs.readdirSync(cacheDir)) {
+    if (f.endsWith('.jpg')) { try { fs.unlinkSync(path.join(cacheDir, f)); } catch { /* best-effort */ } }
+  }
   const scene = path.resolve(path.dirname(descriptorPath), descriptor.scene);
 
   const run: AtlasRun = {
@@ -204,7 +222,7 @@ export async function runAtlas(
     activeChild = child;
     child.on('exit', (code) => {
       if (activeChild === child) activeChild = null;
-      onExitReject?.(new Error(`iris-preview exited before rendering (code ${code ?? '?'}) — see iris-preview.log`));
+      onExitReject?.(new Error(`irisd exited before rendering (code ${code ?? '?'}) — check ~/.iris/logs/irisd.log`));
     });
     client.connect(`ws://127.0.0.1:${ATLAS_PORT}`);
     await new Promise<void>((resolve, reject) => {
@@ -229,7 +247,7 @@ export async function runAtlas(
         });
         await wait(SETTLE_MS);
         const frame = await nextFrame(client, FRAME_TIMEOUT_MS);
-        const file = path.join(cacheDir, `${spec.name}.jpg`);
+        const file = path.join(cacheDir, `${base62Id()}.jpg`);
         fs.writeFileSync(file, frame);
         frames[i] = frame;
         result.status = 'done';
