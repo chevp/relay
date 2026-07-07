@@ -63,15 +63,56 @@ export interface AtlasLayout {
   columns?: number;
   cell?: { width: number; height: number };
   padding?: number;
+  // Sheet/gutter fill behind the packed cells. Defaults to the render
+  // background when transparent, else the viewer gray. "transparent" | "#rrggbb".
+  background?: string;
+}
+
+// Per-view RENDER background — what irisd clears the scene to before capture.
+// "transparent" renders onto alpha 0 and streams RGBA/PNG (ADR-0014 alpha path);
+// "#rrggbb" clears to that opaque color. Omitted ⇒ the engine's default gray.
+export interface AtlasRender {
   background?: string;
 }
 
 export interface AtlasDescriptor {
   kind?: string;
-  scene: string;
+  scene?: string;
   size?: { width: number; height: number };
+  render?: AtlasRender;
   layout?: AtlasLayout;
-  views: ViewSpec[];
+  views?: ViewSpec[];
+  // ─ model-atlas/1 (multi-source): each cell is a DIFFERENT model instead of a
+  //   camera angle. `camera` is the shared framing pose; `models` list the cells.
+  camera?: ShotCamera;
+  models?: ModelAtlasEntry[];
+}
+
+/** One cell of a `model-atlas/1`: a model from an absolute source, auto-framed. */
+export interface ModelAtlasEntry {
+  id: string;
+  /** Absolute path to a .gltf/.glb (never copied; sibling files resolved beside it). */
+  source: string;
+  /** Optional per-model camera override (merged over the shared `camera`). */
+  camera?: ShotCamera;
+  /** Explicit uniform scale (disables auto-normalize). */
+  scale?: number;
+  /** Set false to keep the model's native scale/pivot (skip auto-normalize). */
+  normalize?: boolean;
+}
+
+/** A sub-image in the packed sheet — id → pixel rect + UV rect + source. */
+export interface AtlasSubImage {
+  id: string;
+  index: number;
+  col: number;
+  row: number;
+  rect: { x: number; y: number; w: number; h: number };
+  uv: { u0: number; v0: number; u1: number; v1: number };
+  source: string;
+  status: ShotStatus;
+  ms?: number;
+  error?: string;
 }
 
 export interface AtlasOutput {
@@ -87,12 +128,15 @@ export interface AtlasRun {
   descriptor: string;
   scene: string;
   size?: { width: number; height: number };
+  render?: AtlasRender;
   layout?: AtlasLayout;
   startedAt: string;
   finishedAt?: string;
   status: 'running' | 'done' | 'failed';
   views: ShotResult[];
   atlas?: AtlasOutput;
+  /** model-atlas/1 only: the sub-image manifest packed into the sheet. */
+  subImages?: AtlasSubImage[];
   error?: string;
 }
 
