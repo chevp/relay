@@ -21,7 +21,7 @@ Vulkan renderer:
 | `relay build`    | Game build pipeline.                                        |
 | `relay pack`     | Build an iris asset pack from a TOML definition. Delegates to `irisproc` (see [Asset workers](#asset-workers-irisproc)). |
 | `relay mcp`      | MCP server for AI tooling.                                  |
-| `relay test`     | Scripted scenario runner — drives `iris-player --daemon` from a YAML scenario file (see [Scenarios](#scenarios)). |
+| `relay test`     | Scripted playbook runner — drives `iris-player --daemon` from a YAML playbook file (see [Playbooks](#playbooks)). |
 | `relay story`    | Story / artifact-pipeline orchestration.                    |
 
 What it is **not**: the renderer. See **Player** below.
@@ -180,15 +180,15 @@ src/
 
 ---
 
-## Scenarios
+## Playbooks
 
-`relay test <scenario.yaml>` runs a flat list of steps against
+`relay test <playbook.yaml>` runs a flat list of steps against
 `iris-player --daemon`, capturing screenshots and writing a
-`result.json` report. See **[docs/scenarios.md](docs/scenarios.md)** for
+`result.json` report. See **[docs/playbooks.md](docs/playbooks.md)** for
 full usage docs, and [ADR-0008](../../runtime/iris/docs/adr/0008-scripted-scenario-runner-in-relay.md)
 for the design rationale.
 
-### Scenario file format (V1)
+### Playbook file format (V1)
 
 ```yaml
 name: macos-smoke              # required, used as the result dir name
@@ -221,15 +221,15 @@ Rules:
 - Steps run sequentially. On the first failure the runner stops, marks
   remaining steps `skipped`, writes `result.json`, and exits non-zero.
 - Output goes to `--out <dir>` (default
-  `<scenario-dir>/_results/<name>/`). Relative `capture.out` paths
+  `<playbook-dir>/_results/<name>/`). Relative `capture.out` paths
   resolve under `--out`.
 - The runner does **not** restart the daemon between steps. Long
-  scenarios that hit GPU-leak limits should be split into multiple files.
+  playbooks that hit GPU-leak limits should be split into multiple files.
 
 ### Example
 
 ```bash
-relay test scenarios/macos-smoke.yaml \
+relay test playbooks/macos-smoke.yaml \
   --player /path/to/iris-player \
   --port 9876 \
   --out /tmp/macos-smoke

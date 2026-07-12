@@ -1,17 +1,22 @@
-# `relay test` — scripted scenarios
+# `relay test` — scripted playbooks
 
-A scripted-scenario runner that drives `iris-player --daemon` from a flat
+A scripted-playbook runner that drives `iris-player --daemon` from a flat
 YAML file. One command, one config file, exit 0 on success / non-zero on
 the first failed step.
 
 Design: [ADR-0008](../../../runtime/iris/docs/adr/0008-scripted-scenario-runner-in-relay.md).
+
+> **Naming:** this `steps:` format was formerly called a "scenario". It was
+> renamed to **playbook** per [kosmos ADR-0004](../../../context/adr/0004-scenario-term-disambiguation.md)
+> to free the `.scenario` extension for the adopted multi-stage capture format
+> (`relay gtest`, `stages:`). The `relay test` command name is unchanged.
 
 ---
 
 ## Quick start
 
 ```bash
-# 1. Write a scenario
+# 1. Write a playbook
 cat > smoke.yaml <<'YAML'
 name: smoke
 steps:
@@ -37,14 +42,14 @@ steps over the Storybook WebSocket, then sends `shutdown` and exits.
 ## CLI
 
 ```
-relay test <scenario.yaml> [options]
+relay test <playbook.yaml> [options]
 ```
 
 | Option              | Default                                             | Purpose |
 | ------------------- | --------------------------------------------------- | ------- |
 | `--player <path>`   | `<repo>/cpp/build/bin/Release/nuna-player.exe`      | Path to the `iris-player` binary. |
 | `-p, --port <n>`    | `9876`                                              | TCP port for the daemon WebSocket. |
-| `--out <dir>`       | `<scenario-dir>/_results/<scenario-name>/`          | Where artefacts and `result.json` are written. |
+| `--out <dir>`       | `<playbook-dir>/_results/<playbook-name>/`          | Where artefacts and `result.json` are written. |
 | `--repo <path>`     | Auto-detected from cwd                              | Repo root (looks for `games/` + `cpp/` siblings). |
 | `--command-timeout <ms>` | `15000`                                        | Per-WS-command timeout. Applies to `loadScene`, `capture`, `goto`, `shutdown`. |
 
@@ -53,11 +58,11 @@ Exit codes:
 | Code | Meaning |
 | ---- | ------- |
 | `0`  | All steps succeeded. |
-| `1`  | At least one step failed, or the scenario / player setup is invalid. |
+| `1`  | At least one step failed, or the playbook / player setup is invalid. |
 
 ---
 
-## Scenario file format
+## Playbook file format
 
 YAML, one document, three top-level keys.
 
@@ -115,7 +120,7 @@ steps:
   marks the remaining steps as `skipped` in `result.json`, sends
   `shutdown`, and exits non-zero.
 - **No conditional logic, retries, loops, or variable interpolation.**
-  If you need those, write multiple scenario files and run them from a
+  If you need those, write multiple playbook files and run them from a
   shell.
 
 ---
@@ -123,7 +128,7 @@ steps:
 ## Output
 
 The runner writes everything under `--out` (default
-`<scenario-dir>/_results/<scenario-name>/`):
+`<playbook-dir>/_results/<playbook-name>/`):
 
 ```
 _results/<name>/
@@ -135,7 +140,7 @@ _results/<name>/
 
 ```jsonc
 {
-  "scenario": "/abs/path/to/smoke.yaml",
+  "playbook": "/abs/path/to/smoke.yaml",
   "name":     "smoke",
   "game":     "../games/demo",          // omitted if absent
   "status":   "ok",                     // or "error"
@@ -174,7 +179,7 @@ _results/<name>/
 ## Lifecycle in detail
 
 ```
-relay test scenario.yaml
+relay test playbook.yaml
    │
    ├── parse YAML (line-numbered errors)
    ├── resolve --player, --port, --out
@@ -195,10 +200,10 @@ Notes:
   [StorybookDaemon.cpp](../../../runtime/iris/apps/iris/src/daemon/StorybookDaemon.cpp)),
   not `SceneEditorBridge`. ImGui is suppressed at bind-time, so captures
   contain clean geometry.
-- The daemon is **not** restarted between steps. Long scenarios that hit
+- The daemon is **not** restarted between steps. Long playbooks that hit
   GPU-leak limits should be split into multiple files. (`relay story`
   restarts every N captures because gallery runs walk hundreds of
-  scenes; that's a `story` concern, not a scenario concern.)
+  scenes; that's a `story` concern, not a playbook concern.)
 - The runner runs against a real GPU. Headless OSes need a virtual
   framebuffer (Xvfb, Vulkan-on-llvmpipe). Same guidance as
   `iris-player`.
@@ -208,10 +213,10 @@ Notes:
 ## CI usage
 
 ```bash
-relay test scenarios/smoke.yaml \
+relay test playbooks/smoke.yaml \
   --player "$PLAYER_BIN" \
   --port 9876 \
-  --out "$RUNNER_TEMP/scenario-out" \
+  --out "$RUNNER_TEMP/playbook-out" \
   --command-timeout 30000
 ```
 
@@ -228,7 +233,7 @@ the `--out` directory.
 | `daemon never reached engineRunning state`           | The player crashed during startup, or `--port` is already bound. Check player stdout/stderr (currently `stdio: 'ignore'` — running the binary by hand reproduces the issue). |
 | `capture timeout: PNG not written within …ms`        | The engine accepted `capture` but the PNG never appeared on disk. Usually a renderer or filesystem permission issue. Re-run with `--command-timeout` raised. |
 | `setCamera: entity 'X' not found`                    | Either the scene isn't loaded, or the entity id is wrong. Verify with a manual `relay open` first. |
-| `ScenarioParseError … unknown step kind: "lodScene"` | Typo'd verb — fix the YAML. V1 verbs: `loadScene`, `wait`, `capture`, `goto`, `shutdown`. |
+| `PlaybookParseError … unknown step kind: "lodScene"` | Typo'd verb — fix the YAML. V1 verbs: `loadScene`, `wait`, `capture`, `goto`, `shutdown`. |
 
 ---
 
@@ -242,8 +247,8 @@ These are out of scope for V1 (and tracked under "Deferred" in
 - **Assertions on scene correctness.** A step succeeds when the daemon
   answers `ok`; the runner does not inspect rendered pixels or scene
   state.
-- **Parallel scenarios.** One player per `relay test` invocation.
+- **Parallel playbooks.** One player per `relay test` invocation.
 - **Conditionals, loops, variables, retries.** Flat step list only.
-- **Multiplayer / network scenarios.** Single-player only.
-- **Editor-mode scenarios** (driving `iris-editor` instead of
+- **Multiplayer / network playbooks.** Single-player only.
+- **Editor-mode playbooks** (driving `iris-editor` instead of
   `iris-player`).

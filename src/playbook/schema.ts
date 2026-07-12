@@ -1,5 +1,5 @@
 /**
- * Scenario YAML types + runtime validator (ADR-0008 V1).
+ * Playbook YAML types + runtime validator (ADR-0008 V1).
  *
  * Vocabulary is intentionally five verbs: loadScene, wait, capture, goto,
  * shutdown. Unknown step kinds are a hard error (fail-fast — a typo'd verb
@@ -33,39 +33,39 @@ export type Step =
   | StepGoto
   | StepShutdown;
 
-export interface Scenario {
+export interface Playbook {
   name: string;
-  game?: string;       // optional: resolved relative to the scenario file
+  game?: string;       // optional: resolved relative to the playbook file
   steps: Step[];
-  /** Absolute path of the scenario file (resolved). */
+  /** Absolute path of the playbook file (resolved). */
   source: string;
 }
 
-export class ScenarioParseError extends Error {
+export class PlaybookParseError extends Error {
   constructor(public readonly file: string, public readonly line: number, message: string) {
     super(`${file}:${line}: ${message}`);
-    this.name = 'ScenarioParseError';
+    this.name = 'PlaybookParseError';
   }
 }
 
-export async function loadScenario(scenarioPath: string): Promise<Scenario> {
-  const absPath = path.resolve(scenarioPath);
+export async function loadPlaybook(playbookPath: string): Promise<Playbook> {
+  const absPath = path.resolve(playbookPath);
   const text = await fs.readFile(absPath, 'utf-8');
-  return parseScenario(text, absPath);
+  return parsePlaybook(text, absPath);
 }
 
-export function parseScenario(text: string, sourcePath: string): Scenario {
+export function parsePlaybook(text: string, sourcePath: string): Playbook {
   const lineCounter = new LineCounter();
   const doc = parseDocument(text, { lineCounter });
   if (doc.errors.length > 0) {
     const e = doc.errors[0];
     const pos = e.pos?.[0] ?? 0;
     const line = lineCounter.linePos(pos).line;
-    throw new ScenarioParseError(sourcePath, line, e.message);
+    throw new PlaybookParseError(sourcePath, line, e.message);
   }
   const root = doc.contents;
   if (!root || !isMap(root)) {
-    throw new ScenarioParseError(sourcePath, 1, 'scenario must be a YAML map at top level');
+    throw new PlaybookParseError(sourcePath, 1, 'playbook must be a YAML map at top level');
   }
   const lineOf = (node: Node | null | undefined): number => {
     if (!node?.range) return 1;
@@ -75,24 +75,24 @@ export function parseScenario(text: string, sourcePath: string): Scenario {
   const obj = root.toJSON() as Record<string, unknown>;
   const name = obj.name;
   if (typeof name !== 'string' || name.length === 0) {
-    throw new ScenarioParseError(sourcePath, lineOf(root.get('name', true) as Node) || 1,
-      'scenario.name must be a non-empty string');
+    throw new PlaybookParseError(sourcePath, lineOf(root.get('name', true) as Node) || 1,
+      'playbook.name must be a non-empty string');
   }
   const game = obj.game;
   if (game !== undefined && typeof game !== 'string') {
-    throw new ScenarioParseError(sourcePath, lineOf(root.get('game', true) as Node) || 1,
-      'scenario.game must be a string (or omitted)');
+    throw new PlaybookParseError(sourcePath, lineOf(root.get('game', true) as Node) || 1,
+      'playbook.game must be a string (or omitted)');
   }
 
   const stepsNode = root.get('steps', true) as Node | undefined;
   const stepsJson = obj.steps;
   if (!Array.isArray(stepsJson)) {
-    throw new ScenarioParseError(sourcePath, lineOf(stepsNode) || 1,
-      'scenario.steps must be a YAML list');
+    throw new PlaybookParseError(sourcePath, lineOf(stepsNode) || 1,
+      'playbook.steps must be a YAML list');
   }
   if (stepsJson.length === 0) {
-    throw new ScenarioParseError(sourcePath, lineOf(stepsNode) || 1,
-      'scenario.steps is empty (V1 requires at least one step)');
+    throw new PlaybookParseError(sourcePath, lineOf(stepsNode) || 1,
+      'playbook.steps is empty (V1 requires at least one step)');
   }
 
   // Walk the AST so each step keeps an accurate source line.
@@ -113,16 +113,16 @@ function parseStep(raw: unknown, line: number, source: string): Step {
   // Bare string form: `- shutdown`
   if (typeof raw === 'string') {
     if (raw === 'shutdown') return { kind: 'shutdown', line };
-    throw new ScenarioParseError(source, line,
+    throw new PlaybookParseError(source, line,
       `unknown step kind: "${raw}" (V1 verbs: loadScene, wait, capture, goto, shutdown)`);
   }
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-    throw new ScenarioParseError(source, line,
+    throw new PlaybookParseError(source, line,
       'step must be a verb name or a single-key map (verb: args)');
   }
   const keys = Object.keys(raw as Record<string, unknown>);
   if (keys.length !== 1) {
-    throw new ScenarioParseError(source, line,
+    throw new PlaybookParseError(source, line,
       `step must have exactly one verb key, got ${keys.length}: [${keys.join(', ')}]`);
   }
   const verb = keys[0];
@@ -131,14 +131,14 @@ function parseStep(raw: unknown, line: number, source: string): Step {
   switch (verb) {
     case 'loadScene': {
       if (typeof value !== 'string' || value.length === 0) {
-        throw new ScenarioParseError(source, line,
+        throw new PlaybookParseError(source, line,
           'loadScene requires a non-empty scene URI string (e.g. "nuna://scenes/hub.scene.json")');
       }
       return { kind: 'loadScene', path: value, line };
     }
     case 'wait': {
       if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
-        throw new ScenarioParseError(source, line,
+        throw new PlaybookParseError(source, line,
           'wait requires a non-negative number of milliseconds');
       }
       return { kind: 'wait', ms: value, line };
@@ -153,26 +153,26 @@ function parseStep(raw: unknown, line: number, source: string): Step {
     case 'shutdown': {
       // Allow `shutdown: {}` or `shutdown:` (null).
       if (value !== null && value !== undefined && !(typeof value === 'object' && !Array.isArray(value))) {
-        throw new ScenarioParseError(source, line,
+        throw new PlaybookParseError(source, line,
           'shutdown takes no arguments (use "- shutdown" or "shutdown: {}")');
       }
       return { kind: 'shutdown', line };
     }
     default:
-      throw new ScenarioParseError(source, line,
+      throw new PlaybookParseError(source, line,
         `unknown step kind: "${verb}" (V1 verbs: loadScene, wait, capture, goto, shutdown)`);
   }
 }
 
 function parseGoto(value: unknown, line: number, source: string): StepGoto {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    throw new ScenarioParseError(source, line,
+    throw new PlaybookParseError(source, line,
       'goto requires either { entity: <id> } or { x, y, z[, rx, ry, rz] }');
   }
   const v = value as Record<string, unknown>;
   if ('entity' in v) {
     if (typeof v.entity !== 'string' || v.entity.length === 0) {
-      throw new ScenarioParseError(source, line,
+      throw new PlaybookParseError(source, line,
         'goto.entity must be a non-empty entity id');
     }
     return { kind: 'goto', entity: v.entity, line };
@@ -195,12 +195,12 @@ function readStringField(
   verb: string,
 ): string {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    throw new ScenarioParseError(source, line,
+    throw new PlaybookParseError(source, line,
       `${verb} requires an object with .${field}`);
   }
   const v = (value as Record<string, unknown>)[field];
   if (typeof v !== 'string' || v.length === 0) {
-    throw new ScenarioParseError(source, line,
+    throw new PlaybookParseError(source, line,
       `${verb}.${field} must be a non-empty string`);
   }
   return v;
@@ -215,7 +215,7 @@ function numberField(
 ): number {
   const v = obj[field];
   if (typeof v !== 'number' || !Number.isFinite(v)) {
-    throw new ScenarioParseError(source, line,
+    throw new PlaybookParseError(source, line,
       `${verb}.${field} must be a finite number`);
   }
   return v;

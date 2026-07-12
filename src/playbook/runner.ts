@@ -1,12 +1,12 @@
 /**
- * Scripted scenario runner (ADR-0008 V1).
+ * Scripted playbook runner (ADR-0008 V1).
  *
  * Thin orchestrator: spawn iris-player in daemon mode, connect to its
  * Storybook WS, dispatch each step sequentially, write artefacts, exit
  * non-zero on first failure.
  *
  * Lifecycle:
- *   loadScenario → spawnPlayerDaemon → for step in steps: dispatch →
+ *   loadPlaybook → spawnPlayerDaemon → for step in steps: dispatch →
  *   shutdown → write result.json → exit 0 or 1.
  */
 
@@ -18,17 +18,17 @@ import WebSocket from 'ws';
 import { connect, sendCmd, type IpcResponse } from '../daemon/ipc.js';
 import { spawnPlayerDaemon, shutdownPlayerDaemon, type PlayerHandle } from '../daemon/lifecycle.js';
 import {
-  loadScenario,
-  ScenarioParseError,
-  type Scenario,
+  loadPlaybook,
+  PlaybookParseError,
+  type Playbook,
   type Step,
 } from './schema.js';
 
 export interface RunOptions {
-  scenarioPath: string;
+  playbookPath: string;
   playerPath: string;
   port: number;
-  /** Output dir (artefacts root). Defaults to `<scenario-dir>/_results/<scenario-name>`. */
+  /** Output dir (artefacts root). Defaults to `<playbook-dir>/_results/<playbook-name>`. */
   outDir?: string;
   /** Per-command WS timeout in ms. */
   commandTimeoutMs?: number;
@@ -49,7 +49,7 @@ export interface StepResult {
 }
 
 export interface RunResult {
-  scenario: string;
+  playbook: string;
   name: string;
   game?: string;
   status: 'ok' | 'error';
@@ -61,32 +61,32 @@ export interface RunResult {
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 15_000;
 
-export async function runScenario(opts: RunOptions): Promise<RunResult> {
+export async function runPlaybook(opts: RunOptions): Promise<RunResult> {
   const commandTimeoutMs = opts.commandTimeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
 
-  let scenario: Scenario;
+  let playbook: Playbook;
   try {
-    scenario = await loadScenario(opts.scenarioPath);
+    playbook = await loadPlaybook(opts.playbookPath);
   } catch (err) {
-    if (err instanceof ScenarioParseError) {
+    if (err instanceof PlaybookParseError) {
       console.error(pc.red(`[test] ${err.message}`));
     }
     throw err;
   }
 
-  const scenarioDir = path.dirname(scenario.source);
-  const outDir = path.resolve(opts.outDir ?? path.join(scenarioDir, '_results', scenario.name));
+  const playbookDir = path.dirname(playbook.source);
+  const outDir = path.resolve(opts.outDir ?? path.join(playbookDir, '_results', playbook.name));
   await fs.mkdir(outDir, { recursive: true });
 
-  const gameRoot = scenario.game ? path.resolve(scenarioDir, scenario.game) : undefined;
+  const gameRoot = playbook.game ? path.resolve(playbookDir, playbook.game) : undefined;
 
-  console.log(pc.cyan(`[test] scenario:   ${scenario.source}`));
-  console.log(pc.cyan(`[test] name:       ${scenario.name}`));
+  console.log(pc.cyan(`[test] playbook:   ${playbook.source}`));
+  console.log(pc.cyan(`[test] name:       ${playbook.name}`));
   if (gameRoot) console.log(pc.cyan(`[test] game:       ${gameRoot}`));
   console.log(pc.cyan(`[test] player:     ${opts.playerPath}`));
   console.log(pc.cyan(`[test] port:       ${opts.port}`));
   console.log(pc.cyan(`[test] out:        ${outDir}`));
-  console.log(pc.cyan(`[test] steps:      ${scenario.steps.length}`));
+  console.log(pc.cyan(`[test] steps:      ${playbook.steps.length}`));
 
   const startedAt = new Date();
   const stepResults: StepResult[] = [];
@@ -109,8 +109,8 @@ export async function runScenario(opts: RunOptions): Promise<RunResult> {
   try {
     ws = await connect(`ws://127.0.0.1:${opts.port}`, 5_000);
 
-    for (let i = 0; i < scenario.steps.length; i++) {
-      const step = scenario.steps[i];
+    for (let i = 0; i < playbook.steps.length; i++) {
+      const step = playbook.steps[i];
       const stepStart = Date.now();
       const startedIso = new Date(stepStart).toISOString();
       const label = describeStep(step);
@@ -154,9 +154,9 @@ export async function runScenario(opts: RunOptions): Promise<RunResult> {
   }
 
   const result: RunResult = {
-    scenario: scenario.source,
-    name: scenario.name,
-    game: scenario.game,
+    playbook: playbook.source,
+    name: playbook.name,
+    game: playbook.game,
     status: overallStatus,
     startedAt: startedAt.toISOString(),
     durationMs: Date.now() - startedAt.getTime(),
