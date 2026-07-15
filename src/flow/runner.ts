@@ -200,7 +200,7 @@ async function runIrisPreview(w: Record<string, unknown>, ctx: Ctx, log: (line: 
     for (const v of views) {
       const cam = v.camera ?? {};
       log(`setCamera ${v.name} (${Object.entries(cam).map(([k, x]) => `${k} ${x}`).join(' · ')})`);
-      await client.call('setCamera', {
+      await client.call('iris.camera.setTransform', {
         posX: cam['posX'] ?? 0, posY: cam['posY'] ?? 0, posZ: cam['posZ'] ?? 0,
         rotX: cam['rotX'] ?? 0, rotY: cam['rotY'] ?? 0, rotZ: cam['rotZ'] ?? 0,
         ...(cam['fov'] !== undefined ? { fov: cam['fov'] } : {}),

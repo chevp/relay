@@ -143,7 +143,7 @@ export async function runShots(
   const client = new PreviewClient();
   activeClient = client;
   client.on('connected', () => {
-    client.call('disableOverlay').catch(() => { /* best-effort */ });
+    client.call('iris.debug.setOverlay', { enabled: false }).catch(() => { /* best-effort */ });
     client.startStream({ fps: 4 }).catch(() => { /* best-effort */ });
   });
 
@@ -185,7 +185,7 @@ export async function runShots(
       const startedAt = Date.now();
       const shotLogStart = allLogLines.length;
       try {
-        await client.call('setCamera', {
+        await client.call('iris.camera.setTransform', {
           posX: spec.camera.posX, posY: spec.camera.posY, posZ: spec.camera.posZ,
           rotX: spec.camera.rotX ?? 0, rotY: spec.camera.rotY ?? 0, rotZ: spec.camera.rotZ ?? 0,
           ...(spec.camera.fov !== undefined ? { fov: spec.camera.fov } : {}),

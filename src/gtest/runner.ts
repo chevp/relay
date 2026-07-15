@@ -200,7 +200,7 @@ async function runStage(
     const client = new PreviewClient();
     activeClient = client;
     client.on('connected', () => {
-      client.call('disableOverlay').catch(() => { /* best-effort */ });
+      client.call('iris.debug.setOverlay', { enabled: false }).catch(() => { /* best-effort */ });
       client.startStream({ fps: 4 }).catch(() => { /* best-effort */ });
     });
 
@@ -210,12 +210,12 @@ async function runStage(
 
       if (stage.init) {
         log(`  execScript: ${stage.init}`);
-        await client.call('execScript', { snippet: stage.init, chunkName: stage.name });
+        await client.call('iris.script.exec', { snippet: stage.init, chunkName: stage.name });
       }
 
       const cam: Camera = stage.screenshot.camera;
       log(`  setCamera ${Object.entries(cam).map(([k, v]) => `${k} ${v}`).join(' · ')}`);
-      await client.call('setCamera', {
+      await client.call('iris.camera.setTransform', {
         posX: cam.posX, posY: cam.posY, posZ: cam.posZ,
         rotX: cam.rotX ?? 0, rotY: cam.rotY ?? 0, rotZ: cam.rotZ ?? 0,
         ...(cam.fov !== undefined ? { fov: cam.fov } : {}),

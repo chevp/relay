@@ -4,8 +4,8 @@
  * Ported from the container's preview client so relay can drive irisd
  * headlessly (gtest screenshots, render pipelines) without the Electron shell.
  *
- * Two inbound frame kinds share one connection:
- *   - TEXT   → JSON `{ id, ok, result, error }` responses to call()
+ * JSON-RPC 2.0 (apps/irisdaemon/protocol/iris-api.md):
+ *   - TEXT   → `{ jsonrpc, id, result }` / `{ jsonrpc, id, error: {code, message} }` responses to call()
  *   - BINARY → a complete JPEG of one rendered frame (emitted on `'frame'`)
  * Unsolicited JSON events (a `type` field, no `id`) are emitted on `'event'`.
  */
@@ -13,7 +13,7 @@
 import { EventEmitter } from 'node:events';
 import WebSocket from 'ws';
 
-interface DaemonResponse { id: string; ok: boolean; result?: unknown; error?: string; }
+interface DaemonResponse { id: string; result?: unknown; error?: { code: number; message: string }; }
 interface PendingCall { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: NodeJS.Timeout; }
 
 export interface StreamOptions { fps?: number; quality?: number; }
@@ -49,23 +49,22 @@ export class PreviewClient extends EventEmitter {
   }
 
   async startStream(opts: StreamOptions = {}): Promise<unknown> {
-    return this.call('streamStart', { ...opts });
+    return this.call('iris.stream.start', { ...opts });
   }
 
-  async call(cmd: string, args?: Record<string, unknown>, timeoutMs = 10_000): Promise<unknown> {
+  async call(method: string, params?: Record<string, unknown>, timeoutMs = 10_000): Promise<unknown> {
     const ws = this.ws;
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       throw new Error(`preview daemon not connected (uri=${this.uri ?? 'none'})`);
     }
-    const id = `${cmd}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const id = `${method}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new Error(`preview call timeout: ${cmd} (${timeoutMs}ms)`));
+        reject(new Error(`preview call timeout: ${method} (${timeoutMs}ms)`));
       }, timeoutMs);
       this.pending.set(id, { resolve, reject, timer });
-      const payload: Record<string, unknown> = { id, cmd };
-      if (args && Object.keys(args).length > 0) payload.args = args;
+      const payload = { jsonrpc: '2.0', id, method, params: params ?? {} };
       ws.send(JSON.stringify(payload));
     });
   }
@@ -109,8 +108,8 @@ export class PreviewClient extends EventEmitter {
     if (!p) return;
     clearTimeout(p.timer);
     this.pending.delete(msg.id);
-    if (msg.ok) p.resolve(msg.result);
-    else p.reject(new Error(msg.error ?? 'preview call failed'));
+    if (msg.error) p.reject(new Error(msg.error.message ?? 'preview call failed'));
+    else p.resolve(msg.result);
   }
 
   private failPending(err: Error): void {

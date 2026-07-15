@@ -311,7 +311,7 @@ export async function runAtlas(
     // irisd to PNG (RGBA) frames; a solid color just changes the clear color.
     if (background) {
       try {
-        await client.call('setBackground', {
+        await client.call('iris.environment.setBackground', {
           transparent: background.transparent,
           r: background.r, g: background.g, b: background.b,
         });
@@ -328,7 +328,7 @@ export async function runAtlas(
       persist();
       const startedAt = Date.now();
       try {
-        await client.call('setCamera', {
+        await client.call('iris.camera.setTransform', {
           posX: spec.camera.posX, posY: spec.camera.posY, posZ: spec.camera.posZ,
           rotX: spec.camera.rotX ?? 0, rotY: spec.camera.rotY ?? 0, rotZ: spec.camera.rotZ ?? 0,
           ...(spec.camera.fov !== undefined ? { fov: spec.camera.fov } : {}),
@@ -566,7 +566,7 @@ async function renderOneModel(
       waitConnected(client, MODEL_CONNECT_TIMEOUT_MS).then(resolve, reject);
     }).finally(() => { onExitReject = null; });
     await wait(MODEL_IBL_WARMUP_MS);
-    await client.call('setCamera', {
+    await client.call('iris.camera.setTransform', {
       posX: camera.posX ?? 0, posY: camera.posY ?? 0, posZ: camera.posZ ?? 3,
       rotX: camera.rotX ?? 0, rotY: camera.rotY ?? 0, rotZ: camera.rotZ ?? 0,
       ...(camera.fov !== undefined ? { fov: camera.fov } : {}),
