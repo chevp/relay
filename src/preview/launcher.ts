@@ -11,6 +11,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { resolvePreviewPath } from '../daemon/playerPath.js';
+import { ensureShadersFresh } from './shaderCompile.js';
 
 const ENTRY_CANDIDATES = ['iris.xml', 'cryo.xml'];
 
@@ -41,6 +42,7 @@ export function resolveSceneInput(scenePath: string): string {
 
 export function spawnPreview(scenePath: string, opts: PreviewSpawnOptions): ChildProcess {
   const input = resolveSceneInput(scenePath);
+  ensureShadersFresh(input);
   // --hidden: render off-screen (no OS window) for headless capture.
   const args = [`--scene=${input}`, `--port=${opts.port}`, '--hidden'];
   if (opts.fps) args.push(`--fps=${opts.fps}`);
