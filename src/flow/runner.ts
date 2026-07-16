@@ -14,6 +14,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { parse as parseYaml } from 'yaml';
 import { spawnPreview } from '../preview/launcher.js';
 import { PreviewClient } from '../preview/client.js';
+import { kosmosCacheDir } from '../paths.js';
 import type { FlowDescriptor, FlowJob, FlowRun, FlowStep, JobResult, StepResult } from '../workflows/types.js';
 
 const OLLAMA_GENERATE_URL = 'http://127.0.0.1:11434/api/generate';
@@ -35,7 +36,7 @@ export function flowKey(descriptorPath: string, workspaceRoot: string): string {
 }
 
 export function flowCacheDir(descriptorPath: string, workspaceRoot: string): string {
-  return path.join(workspaceRoot, '.kosmos', 'flows', flowKey(descriptorPath, workspaceRoot));
+  return kosmosCacheDir(workspaceRoot, 'flows', flowKey(descriptorPath, workspaceRoot));
 }
 
 function readDescriptor(descriptorPath: string): FlowDescriptor {

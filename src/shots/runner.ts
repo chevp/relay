@@ -15,6 +15,7 @@ import { parse as parseYaml } from 'yaml';
 import type { ChildProcess } from 'node:child_process';
 import { spawnPreview } from '../preview/launcher.js';
 import { PreviewClient } from '../preview/client.js';
+import { kosmosCacheDir } from '../paths.js';
 import type { ShotsDescriptor, ShotsRun, ShotResult, ShotsView, ViewSpec } from '../workflows/types.js';
 
 const SHOTS_PORT = 9300;
@@ -40,7 +41,7 @@ export function shotsKey(descriptorPath: string, workspaceRoot: string): string 
 }
 
 export function shotsCacheDir(descriptorPath: string, workspaceRoot: string): string {
-  return path.join(workspaceRoot, '.kosmos', 'renders', shotsKey(descriptorPath, workspaceRoot));
+  return kosmosCacheDir(workspaceRoot, 'renders', shotsKey(descriptorPath, workspaceRoot));
 }
 
 function readDescriptor(descriptorPath: string): ShotsDescriptor {

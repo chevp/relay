@@ -18,6 +18,7 @@ import { Jimp } from 'jimp';
 import type { ChildProcess } from 'node:child_process';
 import { spawnPreview } from '../preview/launcher.js';
 import { PreviewClient } from '../preview/client.js';
+import { kosmosCacheDir } from '../paths.js';
 import type {
   AtlasDescriptor, AtlasLayout, AtlasOutput, AtlasRun, AtlasSubImage, AtlasView,
   ModelAtlasEntry, ShotCamera, ShotResult,
@@ -77,7 +78,7 @@ export function atlasKey(descriptorPath: string, workspaceRoot: string): string 
 }
 
 export function atlasCacheDir(descriptorPath: string, workspaceRoot: string): string {
-  return path.join(workspaceRoot, '.kosmos', 'atlas', atlasKey(descriptorPath, workspaceRoot));
+  return kosmosCacheDir(workspaceRoot, 'atlas', atlasKey(descriptorPath, workspaceRoot));
 }
 
 const BASE62 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';

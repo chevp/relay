@@ -18,6 +18,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import { spawnPreview } from '../preview/launcher.js';
 import { PreviewClient } from '../preview/client.js';
+import { kosmosCacheDir } from '../paths.js';
 import { loadDescriptorSync, type GtestDescriptor, type GtestStage, type Camera } from './schema.js';
 import {
   applyOp, getNestedField,
@@ -46,7 +47,7 @@ export function gtestKey(descriptorPath: string, workspaceRoot: string): string 
 }
 
 export function gtestCacheDir(descriptorPath: string, workspaceRoot: string): string {
-  return path.join(workspaceRoot, '.kosmos', 'gtest', gtestKey(descriptorPath, workspaceRoot));
+  return kosmosCacheDir(workspaceRoot, 'gtest', gtestKey(descriptorPath, workspaceRoot));
 }
 
 // ── Assertions ───────────────────────────────────────────────────────────────
