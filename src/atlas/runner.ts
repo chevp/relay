@@ -403,9 +403,10 @@ const MODEL_FRAME_TIMEOUT_MS = 12_000;
 
 /** Resolve the shaders dir the generated per-model iris.xml points at. */
 function shaderDirFor(descriptorPath: string): string {
-  // iris-examples ship shaders at <examples>/../runtime/shaders; the descriptor
-  // lives in <examples>/<example>/. Walk up two levels + runtime/shaders.
-  return path.resolve(path.dirname(descriptorPath), '../../runtime/shaders');
+  // Single source of truth is the engine's own shader tree at
+  // runtime/iris/assets/shaders; the descriptor lives in
+  // <examples>/<example>/. Walk up three levels into runtime/iris/assets/shaders.
+  return path.resolve(path.dirname(descriptorPath), '../../../iris/assets/shaders');
 }
 const toFileUri = (p: string): string => 'file://' + p.replace(/\\/g, '/');
 
