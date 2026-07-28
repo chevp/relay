@@ -21,8 +21,6 @@ Vulkan renderer:
 | `relay build`    | Game build pipeline.                                        |
 | `relay pack`     | Build an iris asset pack from a TOML definition. Delegates to `irisproc` (see [Asset workers](#asset-workers-irisproc)). |
 | `relay mcp`      | MCP server for AI tooling.                                  |
-| `relay test`     | Scripted playbook runner — drives `iris-player --daemon` from a YAML playbook file (see [Playbooks](#playbooks)). |
-| `relay story`    | Story / artifact-pipeline orchestration.                    |
 
 What it is **not**: the renderer. See **Player** below.
 
@@ -177,66 +175,6 @@ src/
 ├── open/               ← nuna:// URL launcher
 └── watch/              ← chokidar-based file watcher
 ```
-
----
-
-## Playbooks
-
-`relay test <playbook.yaml>` runs a flat list of steps against
-`iris-player --daemon`, capturing screenshots and writing a
-`result.json` report. See **[docs/playbooks.md](docs/playbooks.md)** for
-full usage docs, and [ADR-0008](../../runtime/iris/docs/adr/0008-scripted-scenario-runner-in-relay.md)
-for the design rationale.
-
-### Playbook file format (V1)
-
-```yaml
-name: macos-smoke              # required, used as the result dir name
-game: ../games/demo            # optional, resolved relative to the YAML file
-steps:                         # required, one or more steps
-  - loadScene: nuna://scenes/hub.scene.json
-  - wait: 800                  # pure wall-clock delay in ms
-  - goto: { entity: PlayerSpawn }
-  - capture: { out: shots/hub-spawn.png }
-  - goto: { x: 0, y: 5, z: 12, rx: -20, ry: 0, rz: 0 }
-  - capture: { out: shots/hub-overview.png }
-  - shutdown                   # optional — the runner also sends this on exit
-```
-
-Step vocabulary (V1):
-
-| Step        | Args                                                | Daemon `cmd`      |
-| ----------- | --------------------------------------------------- | ----------------- |
-| `loadScene` | `<scene-uri>` (string)                              | `loadScene`       |
-| `wait`      | `<ms>` (number, ≥ 0)                                | *(client-side)*   |
-| `capture`   | `{ out: <png-path> }` (relative to `--out`)         | `capture`         |
-| `goto`      | `{ entity: <id> }` **or** `{ x, y, z[, rx, ry, rz] }` | `setCamera`     |
-| `shutdown`  | none                                                | `shutdown`        |
-
-Rules:
-
-- Unknown step verbs are a hard error (with line number) — typos must
-  not be silently skipped.
-- Unknown *fields* on a known step are ignored (overlay policy, ADR-0007).
-- Steps run sequentially. On the first failure the runner stops, marks
-  remaining steps `skipped`, writes `result.json`, and exits non-zero.
-- Output goes to `--out <dir>` (default
-  `<playbook-dir>/_results/<name>/`). Relative `capture.out` paths
-  resolve under `--out`.
-- The runner does **not** restart the daemon between steps. Long
-  playbooks that hit GPU-leak limits should be split into multiple files.
-
-### Example
-
-```bash
-relay test playbooks/macos-smoke.yaml \
-  --player /path/to/iris-player \
-  --port 9876 \
-  --out /tmp/macos-smoke
-```
-
-`result.json` fields are V1 only — schema may shuffle. Consumers other
-than humans should not depend on it yet.
 
 ---
 
